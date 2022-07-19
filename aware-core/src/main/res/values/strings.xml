@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AWARE</string>
+    <string name="aware_description">AWARE is an Android\'s framework dedicated to infer, log and share mobile context information between mobile applications. Visit http://awareframework.com for details.</string>
+
+    <string name="channel_general_description">General AWARE notifications</string>
+    <string name="channel_silent_description">Non-interruptive AWARE notifications</string>
+    <string name="channel_datasync_description">AWARE datasync notifications</string>
+
+    <string name="read_permission">Allow read-only access to the local data.</string>
+    <string name="write_permission">Allow read and write access to the local data.</string>
+    <string name="aware_studies">AWARE Studies</string>
+    <string name="aware_sensors">AWARE</string>
+    <string name="aware_stream">AWARE Stream</string>
+    <string name="aware_plugins">AWARE Plugins</string>
+    <string name="aware_esm_questions_title">Questionnaire waiting</string>
+    <string name="aware_esm_questions">Tap to answer</string>
+    <string name="aware_activate_accessibility_title">Please enable AWARE</string>
+    <string name="aware_activate_accessibility">Tap here to activate accessibility service.</string>
+    <string name="aware_activate_battery_optimize_ignore_title">Doze</string>
+    <string name="aware_activate_battery_optimize_ignore">Tap and add to the ignore battery optimizations\' list.</string>
+    <string name="aware_battery_recharge">Please, recharge your phone as soon as possible.</string>
+    <string name="aware_notif_study_sync_title">Study Sync</string>
+    <string name="aware_notif_study_sync">Your study configuration was updated.</string>
+    <string name="aware_join_study_link">Join Study by link</string>
+    <string name="aware_team">Team</string>
+    <string name="aware_qrcode">QRCode</string>
+    <string name="aware_sync">Sync</string>
+    <string name="aware_study">Study</string>
+    <string name="aware_esm_other">Other</string>
+    <string name="aware_esm_other_follow">Can you be more specific, please?</string>
+    <string name="plugins_required">Plugins needed</string>
+    <string name="sensors_required">Sensors needed</string>
+    <string name="sync_study_config">Check for study updates</string>
+    <string name="sync_study_data">Sync data</string>
+    <string name="join_study">Join a study</string>
+    <string name="quit_study">Quit study</string>
+    <string name="sign_up">Sign Up!</string>
+    <string name="install">Install</string>
+    <string name="foreground_notification_title">AWARE</string>
+    <string name="foreground_notification_text">Data collection active</string>
+    <string name="foreground_notification_sync_text">Sync</string>
+
+    <string name="sensor_accelerometer">Accelerometer</string>
+    <string name="sensor_applications">Applications</string>
+    <string name="sensor_bluetooth">Bluetooth</string>
+    <string name="sensor_locations">Locations</string>
+    <string name="sensor_installations">Installations</string>
+    <string name="sensor_esms">Mobile questionnaires/ESM</string>
+    <string name="sensor_temperature">Temperature</string>
+    <string name="sensor_linear_accelerometer">Linear Accelerometer</string>
+    <string name="sensor_gravity">Gravity</string>
+    <string name="sensor_barometer">Barometer</string>
+    <string name="sensor_magnetometer">Magnetometer</string>
+    <string name="sensor_proximity">Proximity</string>
+    <string name="sensor_light">Light</string>
+    <string name="sensor_telephony">Telephony</string>
+    <string name="sensor_aware">AWARE device</string>
+    <string name="sensor_rotation">Rotation</string>
+    <string name="sensor_wifi">Wi-Fi</string>
+    <string name="sensor_gyroscope">Gyroscope</string>
+    <string name="sensor_traffic">Network traffic</string>
+    <string name="sensor_processor">Processor (CPU)</string>
+    <string name="sensor_timezone">Timezone</string>
+    <string name="sensor_battery">Battery</string>
+    <string name="sensor_screen">Screen</string>
+    <string name="sensor_network_usage">Network</string>
+    <string name="sensor_communications">Communications (call/text)</string>
+    <string name="sensor_keyboard">Keyboard</string>
+    <string name="sensor_significant">Significant motion</string>
+
+    <string name="loading_join_study_title">Retrieving study details</string>
+    <string name="loading_join_study_msg">Please wait...</string>
+
+</resources>

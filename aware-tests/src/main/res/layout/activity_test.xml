@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <Button
+        android:id="@+id/button_ESMNotification"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="ESM test" />
+
+    <Button
+        android:text="Scheduler test"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/btn_test_timer" />
+
+    <Button
+        android:text="Delete schedules"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/btn_clear_schedulers" />
+
+    <Button
+        android:text="Jenkins test"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/btn_jenkins" />
+
+    <Button
+        android:text="Sentimental"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/btnSentimental"/>
+</LinearLayout>

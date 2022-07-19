@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    android:key="pref_aware_device"
+    android:title="@string/app_name">
+    <PreferenceCategory
+        android:key="device_ids"
+        android:title="Device">
+        <EditTextPreference
+            android:key="device_id"
+            android:persistent="true"
+            android:selectable="false"
+            android:summary="%s"
+            android:title="AWARE Device ID" />
+        <EditTextPreference
+            android:key="device_label"
+            android:persistent="true"
+            android:summary="%s"
+            android:title="Device label" />
+        <EditTextPreference
+            android:key="aware_version"
+            android:persistent="true"
+            android:selectable="false"
+            android:summary="%s"
+            android:title="AWARE version" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:key="study_actions"
+        android:title="">
+        <com.aware.phone.ui.prefs.JoinStudyPref
+            android:key="study_join_button" />
+    </PreferenceCategory>
+</PreferenceScreen>
