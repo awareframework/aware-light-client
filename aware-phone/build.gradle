@@ -37,6 +37,7 @@ android {
         resValue "string", "provider_proximity", android.defaultConfig.applicationId + ".provider.proximity"
         resValue "string", "provider_rotation", android.defaultConfig.applicationId + ".provider.rotation"
         resValue "string", "provider_screen", android.defaultConfig.applicationId + ".provider.screen"
+        resValue "string", "provider_screentext", android.defaultConfig.applicationId + ".provider.screentext"
         resValue "string", "provider_significant", android.defaultConfig.applicationId + ".provider.significant"
         resValue "string", "provider_telephony", android.defaultConfig.applicationId + ".provider.telephony"
         resValue "string", "provider_temperature", android.defaultConfig.applicationId + ".provider.temperature"

@@ -52,9 +52,16 @@ public class Aware_Join_Study extends Aware_Activity {
 
     public static final String EXTRA_STUDY_URL = "study_url";
     public static final String EXTRA_STUDY_CONFIG = "study_config";
+    public static final String INPUT_PASSWORD = "input_password";
+
+
 
     private static String study_url;
     private JSONArray study_configs;
+    private static String input_password;
+
+
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,6 +99,7 @@ public class Aware_Join_Study extends Aware_Activity {
 
         study_url = getIntent().getStringExtra(EXTRA_STUDY_URL);
         String studyConfigStr = getIntent().getStringExtra(EXTRA_STUDY_CONFIG);
+        input_password = getIntent().getStringExtra(INPUT_PASSWORD);
 
         //If we are getting here from an AWARE study link (deeplink)
         String scheme = getIntent().getScheme();
@@ -463,7 +471,7 @@ public class Aware_Join_Study extends Aware_Activity {
 
         @Override
         protected Void doInBackground(Void... params) {
-            StudyUtils.applySettings(getApplicationContext(), study_url, study_configs);
+            StudyUtils.applySettings(getApplicationContext(), study_url, study_configs, input_password);
             return null;
         }
 

@@ -14,6 +14,7 @@ android {
         targetSdkVersion target_sdk
         minSdkVersion minimum_sdk
 
+        resValue "string", "provider_screentext", "com.aware.provider.screentext"
         resValue "string", "provider_accelerometer", "com.aware.provider.accelerometer"
         resValue "string", "provider_applications", "com.aware.provider.applications"
         resValue "string", "provider_aware", "com.aware.provider.aware"

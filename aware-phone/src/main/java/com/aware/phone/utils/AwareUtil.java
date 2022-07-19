@@ -73,7 +73,9 @@ public class AwareUtil {
             JSONObject dbInfo = config.getJSONObject("database");
             return Jdbc.testConnection(dbInfo.getString("database_host"),
                     dbInfo.getString("database_port"), dbInfo.getString("database_name"),
-                    dbInfo.getString("database_username"), dbInfo.getString("database_password"));
+                    dbInfo.getString("database_username"), dbInfo.getString("database_password"),
+                    dbInfo.getBoolean("config_without_password"),
+                    Aware.getSetting(context, Aware_Preferences.DB_PASSWORD));
         } catch (JSONException e) {
             return false;
         }

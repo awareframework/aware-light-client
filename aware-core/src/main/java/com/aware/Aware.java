@@ -183,6 +183,7 @@ public class Aware extends Service {
     private static Intent bluetoothSrv = null;
     private static Intent screenSrv = null;
     private static Intent batterySrv = null;
+    private static Intent screenTextSrv = null;
     private static Intent networkSrv = null;
     private static Intent trafficSrv = null;
     private static Intent communicationSrv = null;
@@ -1230,7 +1231,6 @@ public class Aware extends Service {
                 if (!qry.getString(qry.getColumnIndex(Aware_Settings.SETTING_VALUE)).equals(value.toString())) {
                     context.getApplicationContext().getContentResolver().update(Aware_Settings.CONTENT_URI, setting, Aware_Settings.SETTING_ID + "=" + qry.getInt(qry.getColumnIndex(Aware_Settings.SETTING_ID)), null);
                     if (Aware.DEBUG) Log.d(Aware.TAG, "Updated: " + key + "=" + value);
-
                     // To track user turning on/off sensors
                     String sensor_track_mes = "Sensor: " + key + "=" + value;
                     if (Aware.isStudy(context)) {
@@ -2563,6 +2563,10 @@ public class Aware extends Service {
         if (Aware.getSetting(context, Aware_Preferences.STATUS_KEYBOARD).equals("true")) {
             startKeyboard(context);
         } else stopKeyboard(context);
+
+        if (Aware.getSetting(context, Aware_Preferences.STATUS_SCREENTEXT).equals("true")) {
+            startScreenText(context);
+        } else stopScreenText(context);
     }
 
     public static void startPlugins(Context context) {
@@ -2688,6 +2692,7 @@ public class Aware extends Service {
         stopESM(context);
         stopInstallations(context);
         stopKeyboard(context);
+        stopScreenText(context);
         stopScheduler(context);
     }
 
@@ -2741,6 +2746,28 @@ public class Aware extends Service {
         if (keyboard == null) keyboard = new Intent(context, Keyboard.class);
         context.startService(keyboard);
     }
+
+    /**
+     * Start the screentext service
+     *
+     * @param context
+     */
+    public static void startScreenText(Context context) {
+        if (context == null) return;
+        if (screenTextSrv == null) screenTextSrv = new Intent(context, ScreenText.class);
+        context.startService(screenTextSrv);
+    }
+
+    /**
+     * Stop the screentext service
+     *
+     * @param context
+     */
+    public static void stopScreenText(Context context) {
+        if (context == null) return;
+        if (screenTextSrv != null) context.stopService(screenTextSrv);
+    }
+
 
     /**
      * Stop keyboard module

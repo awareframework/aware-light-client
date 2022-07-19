@@ -68,14 +68,24 @@ public class Jdbc {
      * @param password db password
      * @return true if a connection was established, false otherwise.
      */
-    public static boolean testConnection(String host, String port, String name, String username, String password) {
+    public static boolean testConnection(String host, String port, String name, String username, String password, Boolean config_without_password, String input_password) {
         String connectionUrl = String.format("jdbc:mysql://%s:%s/%s", host, port, name);
         Log.i(TAG, "Establishing connection to remote database...");
 
+
+
         try {
             Class.forName("com.mysql.jdbc.Driver").newInstance();
-            connection = DriverManager.getConnection(connectionUrl, username, password);
             Log.i(TAG, "Connected to remote database...");
+
+            if (config_without_password == false){
+                Log.i(TAG, "No input password. Default password: " + password);
+                connection = DriverManager.getConnection(connectionUrl, username, password);
+            }else{
+                Log.i(TAG, "Input password needed: " + input_password);
+                connection = DriverManager.getConnection(connectionUrl, username, input_password);
+            }
+
             connection.close();
             return true;
         } catch (Exception e) {
@@ -98,6 +108,7 @@ public class Jdbc {
 
         try {
             Class.forName("com.mysql.jdbc.Driver").newInstance();
+
             connection = DriverManager.getConnection(connectionUrl,
                     Aware.getSetting(context, Aware_Preferences.DB_USERNAME),
                     Aware.getSetting(context, Aware_Preferences.DB_PASSWORD));

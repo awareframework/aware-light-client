@@ -93,6 +93,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
 
         if (DATABASE_TABLES != null && TABLES_FIELDS != null && CONTEXT_URIS != null) {
             for (int i = 0; i < DATABASE_TABLES.length; i++) {
+
                 offloadData(mContext, DATABASE_TABLES[i], Aware.getSetting(getContext(), Aware_Preferences.WEBSERVICE_SERVER), TABLES_FIELDS[i], CONTEXT_URIS[i]);
             }
         }

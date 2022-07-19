@@ -104,6 +104,14 @@
             <CheckBoxPreference
                 android:defaultValue="false"
                 android:dependency="status_applications"
+                android:key="status_screentext"
+                android:persistent="true"
+                android:summary="Read the text on the screen"
+                android:title="ScreenText" />
+
+            <CheckBoxPreference
+                android:defaultValue="false"
+                android:dependency="status_applications"
                 android:key="status_keyboard"
                 android:persistent="true"
                 android:summary="Logs keyboard input (no passwords)"

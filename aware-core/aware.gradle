@@ -4,8 +4,8 @@ buildscript {
         mqtt_libs = '1.2.1'
         ion_libs = "2.+"
         google_libs = "17.0.0"
-        version_code = 821
-        version_readable = "4.0." + version_code + "." + "bundle"
+        version_code = 1
+        version_readable = "4.1." + version_code + "." + "bundle"
         compile_sdk = 28
         target_sdk = 28
         minimum_sdk = 24
