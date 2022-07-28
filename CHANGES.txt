@@ -1,0 +1,8 @@
+Change log for AWARE-Light
+
+4.0.821.light.bundle
+- Added the 'sensor sensor' function, which creates a record in the aware_log table when a user turns any of the sensors on/off.
+- Fixed bug that caused AWARE-Light to crash when phone call or SMS functions were used.
+
+4.0.820.light.bundle
+- This version started by forking AWARE (https://github.com/denzilferreira/aware-client) and making various changes to get AWARE-Light.
