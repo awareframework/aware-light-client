@@ -1,0 +1,12 @@
+Change log for AWARE-Light
+
+4.1.1.beta
+- Implemented a new option for registering the INSERT-only DB user password, whereby the study config creator can opt to not include the password in the JSON config file. Instead, participants need to manually enter the password to join the study when registering their AWARE-Light installation.
+- Added screen reader (Screentext) sensor, which captures the text content of a user's screen.
+
+4.0.821.light.bundle
+- Added the 'sensor sensor' function, which creates a record in the aware_log table when a user turns any of the sensors on/off.
+- Fixed bug that caused AWARE-Light to crash when phone call or SMS functions were used.
+
+4.0.820.light.bundle
+- This version started by forking AWARE (https://github.com/denzilferreira/aware-client) and making various changes to get AWARE-Light.
