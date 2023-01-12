@@ -54,17 +54,17 @@ public class ScreenText extends Aware_Sensor {
         @Override
         public void onReceive(Context context, Intent intent) {
 
-            if (Aware.isStudy(context)) {
-                ContentResolver.setIsSyncable(Aware.getAWAREAccount(context), Applications_Provider.getAuthority(context), 1);
-                ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(context), Applications_Provider.getAuthority(context), true);
-
-                long frequency = Long.parseLong(Aware.getSetting(context, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
-                SyncRequest request = new SyncRequest.Builder()
-                        .syncPeriodic(frequency, frequency / 3)
-                        .setSyncAdapter(Aware.getAWAREAccount(context), Applications_Provider.getAuthority(context))
-                        .setExtras(new Bundle()).build();
-                ContentResolver.requestSync(request);
-            }
+//            if (Aware.isStudy(context)) {
+//                ContentResolver.setIsSyncable(Aware.getAWAREAccount(context), Applications_Provider.getAuthority(context), 1);
+//                ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(context), Applications_Provider.getAuthority(context), true);
+//
+//                long frequency = Long.parseLong(Aware.getSetting(context, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+//                SyncRequest request = new SyncRequest.Builder()
+//                        .syncPeriodic(frequency, frequency / 3)
+//                        .setSyncAdapter(Aware.getAWAREAccount(context), Applications_Provider.getAuthority(context))
+//                        .setExtras(new Bundle()).build();
+//                ContentResolver.requestSync(request);
+//            }
 
             if (intent.getAction().equals(Aware.ACTION_AWARE_SYNC_DATA)) {
 
@@ -144,6 +144,7 @@ public class ScreenText extends Aware_Sensor {
             try {
                 if (screentext_BR != null) unregisterReceiver(screentext_BR);
             } catch (IllegalArgumentException e) {
+                Log.d(TAG, "ScreenText service unbind...");
             }
         }
         return super.onUnbind(intent);
