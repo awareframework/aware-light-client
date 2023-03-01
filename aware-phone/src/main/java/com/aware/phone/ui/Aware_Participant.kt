@@ -44,7 +44,7 @@ class Aware_Participant : AppCompatActivity() {
         for (i in 0 until menu.size()) {
             val item = menu.getItem(i)
             if (item.title.toString().equals(resources.getString(R.string.aware_qrcode), ignoreCase = true)) item.isVisible = false
-            if (item.title.toString().equals(resources.getString(R.string.aware_team), ignoreCase = true)) item.isVisible = false
+//            if (item.title.toString().equals(resources.getString(R.string.aware_team), ignoreCase = true)) item.isVisible = false
             if (item.title.toString().equals(resources.getString(R.string.aware_study), ignoreCase = true)) item.isVisible = true
             if (item.title.toString().equals(resources.getString(R.string.aware_sync), ignoreCase = true)) item.isVisible = true
         }
@@ -73,10 +73,10 @@ class Aware_Participant : AppCompatActivity() {
             studyInfo.putExtra(Aware_Join_Study.EXTRA_STUDY_URL, Aware.getSetting(this, Aware_Preferences.WEBSERVICE_SERVER))
             startActivity(studyInfo)
         }
-        if (item.title.toString().equals(resources.getString(R.string.aware_team), ignoreCase = true)) {
-            val about_us = Intent(this@Aware_Participant, About::class.java)
-            startActivity(about_us)
-        }
+//        if (item.title.toString().equals(resources.getString(R.string.aware_team), ignoreCase = true)) {
+//            val about_us = Intent(this@Aware_Participant, About::class.java)
+//            startActivity(about_us)
+//        }
         if (item.title.toString().equals(resources.getString(R.string.aware_sync), ignoreCase = true)) {
             Toast.makeText(applicationContext, "Syncing data...", Toast.LENGTH_SHORT).show()
             val sync = Intent(Aware.ACTION_AWARE_SYNC_DATA)

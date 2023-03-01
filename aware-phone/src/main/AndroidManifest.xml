@@ -69,16 +69,16 @@
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="com.aware.phone.Aware_Client" />
         </activity>
-        <activity
-            android:name=".ui.About"
-            android:configChanges="keyboardHidden|orientation|screenSize"
-            android:label="@string/aware_team"
-            android:launchMode="singleTop"
-            android:theme="@style/Theme.Aware">
-            <meta-data
-                android:name="android.support.PARENT_ACTIVITY"
-                android:value="com.aware.phone.Aware_Client" />
-        </activity>
+<!--        <activity-->
+<!--            android:name=".ui.About"-->
+<!--            android:configChanges="keyboardHidden|orientation|screenSize"-->
+<!--            android:label="@string/aware_team"-->
+<!--            android:launchMode="singleTop"-->
+<!--            android:theme="@style/Theme.Aware">-->
+<!--            <meta-data-->
+<!--                android:name="android.support.PARENT_ACTIVITY"-->
+<!--                android:value="com.aware.phone.Aware_Client" />-->
+<!--        </activity>-->
         <activity
             android:name=".ui.Aware_Join_Study"
             android:configChanges="keyboardHidden|orientation|screenSize"

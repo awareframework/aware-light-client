@@ -63,8 +63,8 @@ public abstract class Aware_Activity extends AppCompatPreferenceActivity {
             MenuItem item = menu.getItem(i);
             if (item.getTitle().toString().equalsIgnoreCase(getResources().getString(R.string.aware_qrcode)) && Aware.is_watch(this))
                 item.setVisible(false);
-            if (item.getTitle().toString().equalsIgnoreCase(getResources().getString(R.string.aware_team)) && Aware.is_watch(this))
-                item.setVisible(false);
+//            if (item.getTitle().toString().equalsIgnoreCase(getResources().getString(R.string.aware_team)) && Aware.is_watch(this))
+//                item.setVisible(false);
             if (item.getTitle().toString().equalsIgnoreCase(getResources().getString(R.string.aware_study)) && Aware.is_watch(this))
                 item.setVisible(false);
 //            if (item.getTitle().toString().equalsIgnoreCase(getResources().getString(R.string.aware_sync)) && !Aware.isStudy(this))
@@ -98,10 +98,10 @@ public abstract class Aware_Activity extends AppCompatPreferenceActivity {
             studyInfo.putExtra(Aware_Join_Study.EXTRA_STUDY_URL, Aware.getSetting(this, Aware_Preferences.WEBSERVICE_SERVER));
             startActivity(studyInfo);
         }
-        if (item.getTitle().toString().equalsIgnoreCase(getResources().getString(R.string.aware_team))) {
-            Intent about_us = new Intent(Aware_Activity.this, About.class);
-            startActivity(about_us);
-        }
+//        if (item.getTitle().toString().equalsIgnoreCase(getResources().getString(R.string.aware_team))) {
+//            Intent about_us = new Intent(Aware_Activity.this, About.class);
+//            startActivity(about_us);
+//        }
 //        if (item.getTitle().toString().equalsIgnoreCase(getResources().getString(R.string.aware_sync))) {
 //            Toast.makeText(getApplicationContext(), "Syncing data...", Toast.LENGTH_SHORT).show();
 //            Intent sync = new Intent(Aware.ACTION_AWARE_SYNC_DATA);
