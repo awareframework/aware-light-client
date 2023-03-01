@@ -1037,9 +1037,9 @@ public class Scheduler extends Aware_Sensor {
                 String weekday = weekdays.getString(i);
 
                 if (DEBUG)
-                    Log.d(Scheduler.TAG, "Weekday " + weekday.toUpperCase() + " vs now " + now.getDisplayName(Calendar.DAY_OF_WEEK, Calendar.LONG, Locale.getDefault()).toUpperCase() + " in trigger weekdays: " + weekdays.toString());
+                    Log.d(Scheduler.TAG, "Weekday " + weekday.toUpperCase() + " vs now " + now.getDisplayName(Calendar.DAY_OF_WEEK, Calendar.LONG, Locale.ENGLISH).toUpperCase() + " in trigger weekdays: " + weekdays.toString());
 
-                if (weekday.toUpperCase().equals(now.getDisplayName(Calendar.DAY_OF_WEEK, Calendar.LONG, Locale.getDefault()).toUpperCase()))
+                if (weekday.toUpperCase().equals(now.getDisplayName(Calendar.DAY_OF_WEEK, Calendar.LONG, Locale.ENGLISH).toUpperCase()))
                     return true;
             }
 
@@ -1070,9 +1070,9 @@ public class Scheduler extends Aware_Sensor {
                 String month = months.getString(i);
 
                 if (DEBUG)
-                    Log.d(Scheduler.TAG, "Month " + month.toUpperCase() + " vs now " + now.getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.getDefault()).toUpperCase() + " in trigger months: " + months.toString());
+                    Log.d(Scheduler.TAG, "Month " + month.toUpperCase() + " vs now " + now.getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.ENGLISH).toUpperCase() + " in trigger months: " + months.toString());
 
-                if (month.toUpperCase().equals(now.getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.getDefault()).toUpperCase()))
+                if (month.toUpperCase().equals(now.getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.ENGLISH).toUpperCase()))
                     return true;
             }
         } catch (JSONException e) {
