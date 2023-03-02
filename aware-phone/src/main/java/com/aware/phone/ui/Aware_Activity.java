@@ -116,6 +116,6 @@ public abstract class Aware_Activity extends AppCompatPreferenceActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        setTitle("AWARE");
+        setTitle("AWARE-Light");
     }
 }
