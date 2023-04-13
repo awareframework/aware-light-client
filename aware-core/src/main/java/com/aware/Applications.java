@@ -15,6 +15,7 @@ import android.content.res.Resources;
 import android.database.Cursor;
 import android.database.SQLException;
 import android.database.sqlite.SQLiteException;
+import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -121,7 +122,11 @@ public class Applications extends AccessibilityService {
 
         // conditions to filter the meaningless input
         if (mNodeInfo.getText() != null && !mNodeInfo.getText().toString().equals("")){
-            currScreenText += mNodeInfo.getText() + "||"; // Add division sign for the tree
+            Rect rect = new Rect();
+
+            mNodeInfo.getBoundsInScreen(rect);
+
+            currScreenText += mNodeInfo.getText() + "***" + rect.toString() + "||"; // Add division sign for the tree
         }
 
         if (mNodeInfo.getChildCount() < 1) return;
