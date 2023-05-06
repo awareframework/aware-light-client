@@ -43,6 +43,7 @@ import org.json.JSONException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import android.graphics.Rect;
 
 /**
  * Service that logs application usage on the device.
@@ -122,6 +123,11 @@ public class Applications extends AccessibilityService {
         // conditions to filter the meaningless input
         if (mNodeInfo.getText() != null && !mNodeInfo.getText().toString().equals("")){
             currScreenText += mNodeInfo.getText() + "||"; // Add division sign for the tree
+            Rect rect = new Rect();
+
+            mNodeInfo.getBoundsInScreen(rect);
+
+            currScreenText += mNodeInfo.getText() + "***" + rect.toString() + "||"; // Add division sign for the tree
         }
 
         if (mNodeInfo.getChildCount() < 1) return;
