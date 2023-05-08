@@ -215,7 +215,7 @@ public class Applications extends AccessibilityService {
             textTree(mNodeInfo);
 
 
-            if (!currScreenText.equals("") && track_screentext) {  // TODO: validity of text
+            if (!currScreenText.equals("") && track_screentext && !event.isPassword()) {
 
                 ContentValues screenText = new ContentValues();
                 screenText.put(ScreenText_Provider.ScreenTextData.TIMESTAMP, System.currentTimeMillis());
@@ -262,7 +262,12 @@ public class Applications extends AccessibilityService {
                 rowData.put(Applications_Notifications.TIMESTAMP, System.currentTimeMillis());
                 rowData.put(Applications_Notifications.PACKAGE_NAME, event.getPackageName().toString());
                 rowData.put(Applications_Notifications.APPLICATION_NAME, getApplicationName(event.getPackageName().toString()));
-                rowData.put(Applications_Notifications.TEXT, Encrypter.hash(getApplicationContext(), event.getText().toString()));
+
+                if (Aware.getSetting(getApplicationContext(), Aware_Preferences.MASK_NOTIFICATION_TEXT).equals("true"))
+                    rowData.put(Applications_Notifications.TEXT, Encrypter.hash(getApplicationContext(), event.getText().toString()));
+                else
+                    rowData.put(Applications_Notifications.TEXT, event.getText().toString());
+
                 rowData.put(Applications_Notifications.SOUND, ((notificationDetails.sound != null) ? notificationDetails.sound.toString() : ""));
                 rowData.put(Applications_Notifications.VIBRATE, ((notificationDetails.vibrate != null) ? notificationDetails.vibrate.toString() : ""));
                 rowData.put(Applications_Notifications.DEFAULTS, notificationDetails.defaults);
@@ -395,13 +400,18 @@ public class Applications extends AccessibilityService {
             keyboard.put(Keyboard_Provider.Keyboard_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
             keyboard.put(Keyboard_Provider.Keyboard_Data.PACKAGE_NAME, (String) event.getPackageName());
             keyboard.put(Keyboard_Provider.Keyboard_Data.IS_PASSWORD, event.isPassword());
-            if (Aware.getSetting(getApplicationContext(), Aware_Preferences.MASK_KEYBOARD).equals("true")){
-                keyboard.put(Keyboard_Provider.Keyboard_Data.BEFORE_TEXT, Converters.maskString(event.getBeforeText().toString()));
-                keyboard.put(Keyboard_Provider.Keyboard_Data.CURRENT_TEXT, Converters.maskString(event.getText().toString()));
-            }
-            else{
-                keyboard.put(Keyboard_Provider.Keyboard_Data.BEFORE_TEXT, event.getBeforeText().toString());
-                keyboard.put(Keyboard_Provider.Keyboard_Data.CURRENT_TEXT, event.getText().toString());
+            if (event.isPassword()){
+                keyboard.put(Keyboard_Provider.Keyboard_Data.BEFORE_TEXT, "");
+                keyboard.put(Keyboard_Provider.Keyboard_Data.CURRENT_TEXT, "");
+            } else{
+                if (Aware.getSetting(getApplicationContext(), Aware_Preferences.MASK_KEYBOARD).equals("true")){
+                    keyboard.put(Keyboard_Provider.Keyboard_Data.BEFORE_TEXT, Converters.maskString(event.getBeforeText().toString()));
+                    keyboard.put(Keyboard_Provider.Keyboard_Data.CURRENT_TEXT, Converters.maskString(event.getText().toString()));
+                }
+                else{
+                    keyboard.put(Keyboard_Provider.Keyboard_Data.BEFORE_TEXT, event.getBeforeText().toString());
+                    keyboard.put(Keyboard_Provider.Keyboard_Data.CURRENT_TEXT, event.getText().toString());
+                }
             }
 
             if (awareSensor != null) awareSensor.onKeyboard(keyboard);
