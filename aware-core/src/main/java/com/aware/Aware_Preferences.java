@@ -681,6 +681,11 @@ public class Aware_Preferences {
     public static final String MASK_TOUCH_TEXT = "mask_touch_text";
 
     /**
+     * Masks application notifications
+     */
+    public static final String MASK_NOTIFICATION_TEXT = "mask_notification_text";
+
+    /**
      * Lock interface after participant joins study
      */
     public static final String INTERFACE_LOCKED = "interface_locked";
