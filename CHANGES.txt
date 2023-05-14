@@ -1,8 +1,9 @@
 Change log for AWARE-Light
 
-4.1.1.beta
+4.1.1.light.bundle & 4.1.1.beta
 - Implemented a new option for registering the INSERT-only DB user password, whereby the study config creator can opt to not include the password in the JSON config file. Instead, participants need to manually enter the password to join the study when registering their AWARE-Light installation.
-- Added screen reader (Screentext) sensor, which captures the text content of a user's screen.
+- Added screen reader (Screentext) sensor, which captures the text content and coordinates of a user's screen. Hidden passwords are not collected by default.
+- Optional collection of notification message content
 
 4.0.821.light.bundle
 - Added the 'sensor sensor' function, which creates a record in the aware_log table when a user turns any of the sensors on/off.
