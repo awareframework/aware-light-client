@@ -21,6 +21,8 @@ import android.provider.Settings;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
+import android.view.accessibility.AccessibilityNodeInfo;
+
 import androidx.core.app.NotificationCompat;
 import androidx.core.view.accessibility.AccessibilityEventCompat;
 import androidx.core.view.accessibility.AccessibilityManagerCompat;
@@ -31,14 +33,17 @@ import com.aware.providers.Applications_Provider.Applications_Foreground;
 import com.aware.providers.Applications_Provider.Applications_History;
 import com.aware.providers.Applications_Provider.Applications_Notifications;
 import com.aware.providers.Keyboard_Provider;
+import com.aware.providers.ScreenText_Provider;
 import com.aware.providers.Screen_Provider;
 import com.aware.utils.Converters;
 import com.aware.utils.Encrypter;
 import com.aware.utils.Scheduler;
 import org.json.JSONException;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import android.graphics.Rect;
 
 /**
  * Service that logs application usage on the device.
@@ -85,6 +90,54 @@ public class Applications extends AccessibilityService {
 
     public String AUTHORITY = "";
 
+    // Screentext variables
+    private String currScreenText = "";
+
+    ArrayList<ContentValues> contentBuffer = new ArrayList<ContentValues>();
+
+    ArrayList<Integer> textBuffer = new ArrayList<Integer>();
+
+    int TEXT_BUFFER_LIMIT = 100;
+
+//    int mDebugDepth = 0;
+
+    private static int screenStatus = 0; //  ACTION_AWARE_SCREEN_OFF ACTION_AWARE_SCREEN_UNLOCKED
+
+
+    public static void setScreenStatus(int status){
+        screenStatus = status;
+    }
+
+    public static int getScreenStatus(){
+        return screenStatus;
+    }
+
+    /**
+     * Recursively track all the text on the screen in a tree structure to the text variable
+     *
+     * @param mNodeInfo
+     */
+    private void textTree(AccessibilityNodeInfo mNodeInfo){
+        if (mNodeInfo == null) return;
+
+        // conditions to filter the meaningless input
+        if (mNodeInfo.getText() != null && !mNodeInfo.getText().toString().equals("")){
+            Rect rect = new Rect();
+
+            mNodeInfo.getBoundsInScreen(rect);
+
+            currScreenText += mNodeInfo.getText() + "***" + rect.toString() + "||"; // Add division sign for the tree
+        }
+
+        if (mNodeInfo.getChildCount() < 1) return;
+//        mDebugDepth++;
+
+        for (int i = 0; i < mNodeInfo.getChildCount(); i++) {
+            textTree(mNodeInfo.getChild(i));
+        }
+//        mDebugDepth--;
+    }
+
     /**
      * Given a package name, get application label in the default language of the device
      *
@@ -115,6 +168,91 @@ public class Applications extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event.getPackageName() == null) return;
 
+
+
+
+        // if text buffer is full then send all contents in the content buffer
+        if (textBuffer.size() == TEXT_BUFFER_LIMIT){
+
+
+            for (ContentValues content: contentBuffer){
+                getContentResolver().insert(ScreenText_Provider.ScreenTextData.CONTENT_URI, content);
+
+                if (awareSensor != null) awareSensor.onScreentext(content);
+                Intent screen_text_data = new Intent(ScreenText.ACTION_SCREENTEXT_DETECT);
+                sendBroadcast(screen_text_data);
+            }
+            textBuffer.clear();
+            contentBuffer.clear();
+        }
+
+
+        Boolean track_screentext = true;
+
+        // Package specification criteria:
+        // 0: only track data of the inclusive packages for screentext function
+        // 1: only track data except the exclusive packages for screentext function
+        // 2: by default track all apps
+        int criteria = (int) Long.parseLong(Aware.getSetting(getApplicationContext(), Aware_Preferences.PACKAGE_SPECIFICATION));
+        if (criteria == 0 || criteria == 1){
+            String app_names = Aware.getSetting(getApplicationContext(), Aware_Preferences.PACKAGE_NAMES);
+            String curr_app = event.getPackageName().toString();
+            if (criteria == 0 && !app_names.contains(curr_app)){ // package not in inclusive packages
+
+                track_screentext = false;
+            }
+            else if (criteria == 1 && app_names.contains(curr_app)) { // package in exclusive packages
+                track_screentext = false;
+            }
+        }
+
+
+        if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENTEXT).equals("true") && getScreenStatus() == 0) {
+
+            // get text tree
+            AccessibilityNodeInfo mNodeInfo = event.getSource();
+            textTree(mNodeInfo);
+
+
+            if (!currScreenText.equals("") && track_screentext && !event.isPassword()) {
+
+                ContentValues screenText = new ContentValues();
+                screenText.put(ScreenText_Provider.ScreenTextData.TIMESTAMP, System.currentTimeMillis());
+                screenText.put(ScreenText_Provider.ScreenTextData.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+
+                if (event.getPackageName() != null){
+                    screenText.put(ScreenText_Provider.ScreenTextData.PACKAGE_NAME, event.getPackageName().toString());
+                } else{
+                    screenText.put(ScreenText_Provider.ScreenTextData.PACKAGE_NAME, "");
+                }
+
+                if (event.getClassName() != null) {
+                    screenText.put(ScreenText_Provider.ScreenTextData.CLASS_NAME, event.getClassName().toString());
+                } else{
+                    screenText.put(ScreenText_Provider.ScreenTextData.CLASS_NAME, "");
+                }
+
+
+                screenText.put(ScreenText_Provider.ScreenTextData.USER_ACTION, event.getAction());
+                screenText.put(ScreenText_Provider.ScreenTextData.EVENT_TYPE, event.getEventType());
+                screenText.put(ScreenText_Provider.ScreenTextData.TEXT, currScreenText);
+
+                int hashedText = currScreenText.hashCode();
+
+                // Add to content: get rid of the duplicate text
+                if (!textBuffer.contains(hashedText)){
+                    textBuffer.add(hashedText);
+                    contentBuffer.add(screenText);
+
+//                    Log.d(TAG,"Buffer size：" + textBuffer.size());
+                }
+
+                currScreenText = "";
+
+            }
+        }
+
+
         if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_NOTIFICATIONS).equals("true") && event.getEventType() == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
             Notification notificationDetails = (Notification) event.getParcelableData();
             if (notificationDetails != null) {
@@ -123,7 +261,12 @@ public class Applications extends AccessibilityService {
                 rowData.put(Applications_Notifications.TIMESTAMP, System.currentTimeMillis());
                 rowData.put(Applications_Notifications.PACKAGE_NAME, event.getPackageName().toString());
                 rowData.put(Applications_Notifications.APPLICATION_NAME, getApplicationName(event.getPackageName().toString()));
-                rowData.put(Applications_Notifications.TEXT, Encrypter.hash(getApplicationContext(), event.getText().toString()));
+
+                if (Aware.getSetting(getApplicationContext(), Aware_Preferences.MASK_NOTIFICATION_TEXT).equals("true"))
+                    rowData.put(Applications_Notifications.TEXT, Encrypter.hash(getApplicationContext(), event.getText().toString()));
+                else
+                    rowData.put(Applications_Notifications.TEXT, event.getText().toString());
+
                 rowData.put(Applications_Notifications.SOUND, ((notificationDetails.sound != null) ? notificationDetails.sound.toString() : ""));
                 rowData.put(Applications_Notifications.VIBRATE, ((notificationDetails.vibrate != null) ? notificationDetails.vibrate.toString() : ""));
                 rowData.put(Applications_Notifications.DEFAULTS, notificationDetails.defaults);
@@ -256,13 +399,18 @@ public class Applications extends AccessibilityService {
             keyboard.put(Keyboard_Provider.Keyboard_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
             keyboard.put(Keyboard_Provider.Keyboard_Data.PACKAGE_NAME, (String) event.getPackageName());
             keyboard.put(Keyboard_Provider.Keyboard_Data.IS_PASSWORD, event.isPassword());
-            if (Aware.getSetting(getApplicationContext(), Aware_Preferences.MASK_KEYBOARD).equals("true")){
-                keyboard.put(Keyboard_Provider.Keyboard_Data.BEFORE_TEXT, Converters.maskString(event.getBeforeText().toString()));
-                keyboard.put(Keyboard_Provider.Keyboard_Data.CURRENT_TEXT, Converters.maskString(event.getText().toString()));
-            }
-            else{
-                keyboard.put(Keyboard_Provider.Keyboard_Data.BEFORE_TEXT, event.getBeforeText().toString());
-                keyboard.put(Keyboard_Provider.Keyboard_Data.CURRENT_TEXT, event.getText().toString());
+            if (event.isPassword()){
+                keyboard.put(Keyboard_Provider.Keyboard_Data.BEFORE_TEXT, "");
+                keyboard.put(Keyboard_Provider.Keyboard_Data.CURRENT_TEXT, "");
+            } else{
+                if (Aware.getSetting(getApplicationContext(), Aware_Preferences.MASK_KEYBOARD).equals("true")){
+                    keyboard.put(Keyboard_Provider.Keyboard_Data.BEFORE_TEXT, Converters.maskString(event.getBeforeText().toString()));
+                    keyboard.put(Keyboard_Provider.Keyboard_Data.CURRENT_TEXT, Converters.maskString(event.getText().toString()));
+                }
+                else{
+                    keyboard.put(Keyboard_Provider.Keyboard_Data.BEFORE_TEXT, event.getBeforeText().toString());
+                    keyboard.put(Keyboard_Provider.Keyboard_Data.CURRENT_TEXT, event.getText().toString());
+                }
             }
 
             if (awareSensor != null) awareSensor.onKeyboard(keyboard);
@@ -585,6 +733,13 @@ public class Applications extends AccessibilityService {
          * @param data
          */
         void onTouch(ContentValues data);
+
+        /**
+         * Callback upon screentext input changed
+         *
+         * @param data
+         */
+        void onScreentext(ContentValues data);
     }
 
     private synchronized static boolean isAccessibilityEnabled(Context context) {

@@ -94,6 +94,9 @@
             android:name="com.aware.Screen"
             android:exported="true" />
         <service
+            android:name="com.aware.ScreenText"
+            android:exported="true" />
+        <service
             android:name="com.aware.Battery"
             android:exported="true" />
         <service
@@ -388,6 +391,14 @@
             android:syncable="true"
             android:writePermission="com.aware.WRITE_CONTEXT_DATA" />
         <provider
+            android:name="com.aware.providers.ScreenText_Provider"
+            android:authorities="${applicationId}.provider.screentext"
+            android:exported="true"
+            android:label="@string/sensor_screentext"
+            android:readPermission="com.aware.READ_CONTEXT_DATA"
+            android:syncable="true"
+            android:writePermission="com.aware.WRITE_CONTEXT_DATA" />
+        <provider
             android:name="com.aware.providers.Network_Provider"
             android:authorities="${applicationId}.provider.network"
             android:exported="true"
@@ -641,6 +652,16 @@
             <meta-data
                 android:name="android.content.SyncAdapter"
                 android:resource="@xml/sync_screen" />
+        </service>
+        <service
+            android:name="com.aware.syncadapters.ScreenText_Sync"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.SyncAdapter" />
+            </intent-filter>
+            <meta-data
+                android:name="android.content.SyncAdapter"
+                android:resource="@xml/sync_screen_text" />
         </service>
         <service
             android:name="com.aware.syncadapters.Significant_Sync"

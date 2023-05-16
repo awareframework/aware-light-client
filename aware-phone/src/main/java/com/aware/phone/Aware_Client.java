@@ -375,6 +375,7 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
                     findPreference(Aware_Preferences.STATUS_GYROSCOPE),
                     findPreference(Aware_Preferences.STATUS_INSTALLATIONS),
                     findPreference(Aware_Preferences.STATUS_KEYBOARD),
+                    findPreference(Aware_Preferences.STATUS_SCREENTEXT),
                     findPreference(Aware_Preferences.STATUS_LIGHT),
                     findPreference(Aware_Preferences.STATUS_LINEAR_ACCELEROMETER),
                     findPreference(Aware_Preferences.STATUS_LOCATION_GPS),

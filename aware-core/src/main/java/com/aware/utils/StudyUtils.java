@@ -63,9 +63,13 @@ public class StudyUtils extends IntentService {
      */
     public static final String EXTRA_JOIN_STUDY = "study_url";
 
+    public static String input_password_ = "";
+
     public StudyUtils() {
         super("StudyUtils Service");
     }
+
+
 
     @Override
     protected void onHandleIntent(Intent intent) {
@@ -202,7 +206,7 @@ public class StudyUtils extends IntentService {
 
                 if (dbStudy != null && !dbStudy.isClosed()) dbStudy.close();
 
-                applySettings(getApplicationContext(), full_url, study_config);
+                applySettings(getApplicationContext(), full_url, study_config, input_password_);
 
             } catch (JSONException e) {
                 e.printStackTrace();
@@ -218,8 +222,8 @@ public class StudyUtils extends IntentService {
      * @param context
      * @param configs
      */
-    public static void applySettings(Context context, JSONArray configs) {
-        applySettings(context, Aware.getSetting(context, Aware_Preferences.WEBSERVICE_SERVER), configs);
+    public static void applySettings(Context context, JSONArray configs, String input_password) {
+        applySettings(context, Aware.getSetting(context, Aware_Preferences.WEBSERVICE_SERVER), configs, input_password);
     }
 
     /**
@@ -231,8 +235,8 @@ public class StudyUtils extends IntentService {
      * @param webserviceServer
      * @param configs
      */
-    public static void applySettings(Context context, String webserviceServer, JSONArray configs) {
-        applySettings(context, webserviceServer, configs, false);
+    public static void applySettings(Context context, String webserviceServer, JSONArray configs, String input_password) {
+        applySettings(context, webserviceServer, configs, false, input_password);
     }
 
     /**
@@ -245,12 +249,13 @@ public class StudyUtils extends IntentService {
      * @param configs
      * @param insertCompliance true to insert a new compliance record (i.e. when updating a study)
      */
-    public static void applySettings(Context context, String webserviceServer, JSONArray configs, Boolean insertCompliance) {
+    public static void applySettings(Context context, String webserviceServer, JSONArray configs, Boolean insertCompliance, String input_password) {
         boolean is_developer = Aware.getSetting(context, Aware_Preferences.DEBUG_FLAG).equals("true");
 
         //First reset the client to default settings...
         Aware.reset(context);
 
+        input_password_ = input_password;
         if (is_developer) Aware.setSetting(context, Aware_Preferences.DEBUG_FLAG, true);
 
         //Now apply the new settings
@@ -265,7 +270,16 @@ public class StudyUtils extends IntentService {
             Aware.setSetting(context, Aware_Preferences.DB_PORT, dbConfig.getInt("database_port"));
             Aware.setSetting(context, Aware_Preferences.DB_NAME, dbConfig.getString("database_name"));
             Aware.setSetting(context, Aware_Preferences.DB_USERNAME, dbConfig.getString("database_username"));
-            Aware.setSetting(context, Aware_Preferences.DB_PASSWORD, dbConfig.getString("database_password"));
+
+
+            if (!dbConfig.getBoolean("config_without_password")){
+                Aware.setSetting(context, Aware_Preferences.DB_PASSWORD, dbConfig.getString("database_password"));
+            } else {
+
+                Aware.setSetting(context, Aware_Preferences.DB_PASSWORD, input_password);
+            }
+
+
 
             // Set study information
             if (insertCompliance) {
@@ -469,7 +483,7 @@ public class StudyUtils extends IntentService {
                 JSONObject localConfig = new JSONObject(study.getString(
                         study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_CONFIG)));
                 JSONObject newConfig = getStudyConfig(studyUrl);
-                if (!validateStudyConfig(context, newConfig)) {
+                if (!validateStudyConfig(context, newConfig, Aware.getSetting(context, Aware_Preferences.DB_PASSWORD))) {
                     String msg = "Failed to sync study, something is wrong with the config.";
                     Log.e(Aware.TAG, msg);
                     if (toast) {
@@ -495,7 +509,7 @@ public class StudyUtils extends IntentService {
                     }
                     return;
                 }
-                applySettings(context, studyUrl, new JSONArray().put(newConfig), true);
+                applySettings(context, studyUrl, new JSONArray().put(newConfig), true, Aware.getSetting(context, Aware_Preferences.DB_PASSWORD));
                 if (Aware.DEBUG) Aware.debug(context, "Updated study config: " + newConfig);
                 if (toast) {
                     new Handler(Looper.getMainLooper()).post(new Runnable() {
@@ -573,7 +587,7 @@ public class StudyUtils extends IntentService {
      * @param config JSON representing a study configuration
      * @return true if the study config is valid, false otherwise
      */
-    public static boolean validateStudyConfig(Context context, JSONObject config) {
+    public static boolean validateStudyConfig(Context context, JSONObject config, String input_password) {
         for (String key: REQUIRED_STUDY_CONFIG_KEYS) {
             if (!config.has(key)) return false;
         }
@@ -583,7 +597,9 @@ public class StudyUtils extends IntentService {
             JSONObject dbInfo = config.getJSONObject("database");
             return Jdbc.testConnection(dbInfo.getString("database_host"),
                     dbInfo.getString("database_port"), dbInfo.getString("database_name"),
-                    dbInfo.getString("database_username"), dbInfo.getString("database_password"));
+                    dbInfo.getString("database_username"), dbInfo.getString("database_password"),
+                    dbInfo.getBoolean("config_without_password"),
+                    input_password);
         } catch (JSONException e) {
             return false;
         }

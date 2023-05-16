@@ -38,6 +38,7 @@ public class Aware_Preferences {
      */
     public static final String DEVICE_LABEL = "device_label";
 
+
     /**
      * Automatically check for updates on the client
      */
@@ -430,6 +431,25 @@ public class Aware_Preferences {
     public static final String STATUS_SCREEN = "status_screen";
 
     /**
+     * Activate/deactivate text log on screen (boolean)
+     */
+    public static final String STATUS_SCREENTEXT = "status_screentext";
+
+
+    /**
+     * Screentext function: specific package names that are included/excluded
+     */
+    public static final String PACKAGE_NAMES = "package_names";
+
+
+    /**
+     * Screentext function: specify to include/exclude packages
+     */
+    public static final String PACKAGE_SPECIFICATION = "package_specification";
+
+
+
+    /**
      * Activate/deactivate temperature sensor log (boolean)
      */
     public static final String STATUS_TEMPERATURE = "status_temperature";
@@ -659,6 +679,11 @@ public class Aware_Preferences {
      * Masks text produced by touch events
      */
     public static final String MASK_TOUCH_TEXT = "mask_touch_text";
+
+    /**
+     * Masks application notifications
+     */
+    public static final String MASK_NOTIFICATION_TEXT = "mask_notification_text";
 
     /**
      * Lock interface after participant joins study
