@@ -82,5 +82,7 @@ dependencies {
     implementation "com.squareup.okhttp3:okhttp:4.2.2"
     implementation files('libs/mysql-connector-java-5.1.48.jar')
     implementation files('libs/jsonassert-1.5.0.jar')
+    implementation "com.google.android.gms:play-services-fitness:18.0.0"
+    implementation "com.google.android.gms:play-services-auth:17.0.0"
 }
 

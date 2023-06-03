@@ -711,6 +711,82 @@ public class Aware_Preferences {
     public static final String DB_PASSWORD = "database_password";
 
     /**
+     * Frequency to define the level of segmentation for Google Fit data collection.
+     */
+    public static final String GF_GRANULARITY = "google_fit_granularity";
+
+    /**
+     * The number of days for which the Google Fit data will be retrieved prior to the start of the study
+     */
+    public static final String GF_PRESTUDY_RETRIEVE_PEERIOD = "google_fit_prestudy_retrieve_period";
+
+    /**
+     * The number of days for which the Google Fit data will be retrieved upon clicking the designated button
+     */
+    public static final String GF_RETRIEVAL_PERIOD = "google_fit_retrieval_period";
+
+    /**
+     * Aggregated step count.
+     */
+    public static final String GF_STEP = "google_fit_step";
+
+    /**
+     * Aggregated distance in meters.
+     */
+    public static final String GF_DISTANCE = "google_fit_distance";
+
+    /**
+     * A continuous segment of physical activity
+     */
+    public static final String GF_SEGMENT = "google_fit_segment";
+
+    /**
+     * A measure of how fast an object or person is moving, typically measured in units of distance traveled per unit of time
+     */
+    public static final String GF_SPEED = "google_fit_speed";
+
+    /**
+     * The amount of energy in kilocalories (kcal) a person has burned during physical activity.
+     */
+    public static final String GF_CALORIE = "google_fit_calorie";
+
+    /**
+     * The data representing the number of heartbeats per minute (BPM) of a person's heart.
+     */
+    public static final String GF_HEART_RATE = "google_fit_heart_rate";
+
+    /**
+     * The data representing a person's body weight in kilograms (kg).
+     */
+    public static final String GF_WEIGHT = "google_fit_weight";
+
+    /**
+     * The percentage of body fat a person has.
+     */
+    public static final String GF_BODY_FAT_PERCENTAGE = "google_fit_body_fat_percentage";
+
+    /**
+     * The measurement of water intake or the monitoring of fluid levels in the body
+     */
+    public static final String GF_HYDRATION = "google_fit_hydration";
+
+    /**
+     * Nutrients (such as calories, protein, or fat) in a food or drink item.
+     */
+    public static final String GF_NUTRITION = "google_fit_nutrition";
+
+    /**
+     * Measurements related to the power consumption of a device or activity
+     */
+    public static final String GF_POWER = "google_fit_power";
+
+    /**
+     * Basal metabolic rate: the number of calories that an individual's body needs to perform basic functions while at rest
+     */
+    public static final String GF_BMR = "google_fit_bmr";
+
+
+    /**
      * Certificate Authority (CA) of the remote database.
      * This needs to be added to the application's trust store in case the CA is self signed.
      */

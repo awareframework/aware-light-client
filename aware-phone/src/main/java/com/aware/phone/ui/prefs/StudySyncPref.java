@@ -53,6 +53,14 @@ public class StudySyncPref extends Preference {
                 getContext().sendBroadcast(sync);
             }
         });
+        view.findViewById(R.id.btn_google_fit_data).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Toast.makeText(getContext(), "Syncing Google fit data...", Toast.LENGTH_SHORT).show();
+                Intent google_data = new Intent(Aware.ACTION_GOOGLE_FIT_DATA);
+                getContext().sendBroadcast(google_data);
+            }
+        });
 
         return view;
     }

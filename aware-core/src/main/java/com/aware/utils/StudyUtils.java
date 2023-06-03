@@ -307,6 +307,7 @@ public class StudyUtils extends IntentService {
         JSONArray schedulers = new JSONArray();
         JSONArray esm_schedules = new JSONArray();
         JSONArray questions = new JSONArray();
+        JSONArray gf_settings = new JSONArray();
 
         for (int i = 0; i < configs.length(); i++) {
             try {
@@ -316,6 +317,9 @@ public class StudyUtils extends IntentService {
                 }
                 if (element.has("sensors")) {
                     sensors = element.getJSONArray("sensors");
+                }
+                if (element.has("googlefit")){
+                    gf_settings = element.getJSONArray("googlefit");
                 }
                 if (element.has("schedulers")) {
                     schedulers = element.getJSONArray("schedulers");
@@ -382,6 +386,16 @@ public class StudyUtils extends IntentService {
                 }
 
                 createEsmSchedule(context, scheduleJson, questionObjects);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+
+        // Set google fit schedules
+        for (int i = 0; i < gf_settings.length(); i++) {
+            try {
+                JSONObject gf_config = gf_settings.getJSONObject(i);
+                Aware.setSetting(context, gf_config.getString("setting"), gf_config.get("value"));
             } catch (JSONException e) {
                 e.printStackTrace();
             }

@@ -87,6 +87,12 @@ public class Aware extends Service {
 
     /**
      * Received broadcast on all modules
+     * - Retrieve Google fit data to the defined webserver
+     */
+    public static final String ACTION_GOOGLE_FIT_DATA = "ACTION_GOOGLE_FIT_DATA";
+
+    /**
+     * Received broadcast on all modules
      * - Cleans the data collected on the device
      */
     public static final String ACTION_AWARE_CLEAR_DATA = "ACTION_AWARE_CLEAR_DATA";
@@ -249,6 +255,7 @@ public class Aware extends Service {
         awareActions.addAction(Aware.ACTION_AWARE_SYNC_CONFIG);
         awareActions.addAction(Aware.ACTION_AWARE_SYNC_DATA);
         awareActions.addAction(Aware.ACTION_QUIT_STUDY);
+        awareActions.addAction(Aware.ACTION_GOOGLE_FIT_DATA);
         registerReceiver(aware_BR, awareActions);
 
         IntentFilter foreground = new IntentFilter();
@@ -2255,6 +2262,7 @@ public class Aware extends Service {
      * Aware#ACTION_AWARE_ACTION_QUIT_STUDY: quits a study
      * Aware#ACTION_AWARE_SYNC_CONFIG: syncs study config
      * Aware#ACTION_AWARE_SYNC_DATA: send the data remotely
+     * # ACTION_GOOGEL_FIT_DATA: retreive and send the google fit data remotely
      * @author denzil
      */
     public static final Aware_Broadcaster aware_BR = new Aware_Broadcaster();
@@ -2288,6 +2296,11 @@ public class Aware extends Service {
                         StudyUtils.syncStudyConfig(context, showToast);
                     }
                 }).start();
+            }
+            if (intent.getAction().equals(Aware.ACTION_GOOGLE_FIT_DATA)) {
+                Intent googelFitDataIntent = new Intent(context.getApplicationContext(), GoogleFit.class);
+                googelFitDataIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.getApplicationContext().startActivity(googelFitDataIntent);
             }
         }
     }

@@ -42,6 +42,9 @@
             android:launchMode="standard"
             android:theme="@style/Theme.AppCompat.Translucent" />
 
+        <!-- Google fit data -->
+        <activity android:name="com.aware.GoogleFit" />
+
         <!-- AWARE account service -->
         <service android:name="com.aware.utils.Aware_Accounts">
             <intent-filter>

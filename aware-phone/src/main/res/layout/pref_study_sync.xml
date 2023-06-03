@@ -14,6 +14,16 @@
         android:layout_margin="5dp"/>
 
     <Button
+        android:id="@+id/btn_google_fit_data"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@android:id/list"
+        android:background="@color/primaryDark"
+        android:text="@string/google_fit_data"
+        android:textColor="@android:color/white"
+        android:layout_margin="5dp"/>
+
+    <Button
         android:id="@+id/btn_sync_study_data"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

@@ -36,6 +36,7 @@
     <string name="join_study">Join a study</string>
     <string name="quit_study">Quit study</string>
     <string name="sign_up">Sign Up!</string>
+    <string name="google_fit_data">Upload Google fit data</string>
     <string name="install">Install</string>
     <string name="foreground_notification_title">AWARE</string>
     <string name="foreground_notification_text">Data collection active</string>
