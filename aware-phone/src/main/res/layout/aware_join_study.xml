@@ -64,7 +64,7 @@
                                 android:layout_height="wrap_content"
                                 android:ems="10"
                                 android:id="@+id/participant_label"
-                                android:inputType="textEmailAddress" android:hint="Your email address"/>
+                                android:inputType="textEmailAddress" android:hint="Enter your study identifier here"/>
                     </LinearLayout>
 <!--                </LinearLayout>-->
             </LinearLayout>
