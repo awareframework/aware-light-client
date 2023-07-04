@@ -65,7 +65,7 @@ public class ScreenText_Provider extends ContentProvider {
                     + ScreenTextData.DEVICE_ID + " text default '',"
                     + ScreenTextData.CLASS_NAME + " text default '',"
                     + ScreenTextData.PACKAGE_NAME + " text default '',"
-                    + ScreenTextData.TEXT + " text default '',"
+                    + ScreenTextData.TEXT + " longtext default '',"
                     + ScreenTextData.USER_ACTION + " integer default 0,"
                     + ScreenTextData.EVENT_TYPE + " integer default 0"
     };
