@@ -4,7 +4,7 @@ buildscript {
         mqtt_libs = '1.2.1'
         ion_libs = "2.+"
         google_libs = "17.0.0"
-        version_code = 1
+        version_code = 2
         version_readable = "4.1." + version_code + "." + "light.bundle"
         compile_sdk = 28
         target_sdk = 28
