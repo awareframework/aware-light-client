@@ -1,8 +1,15 @@
 Change log for AWARE-Light
 
+4.1.3.beta
+- Fixed bug for random EMA triggered condition
+
+4.1.2.beta
+- Screen reader table allows longer text to be stored
+
 4.1.1.beta
 - Implemented a new option for registering the INSERT-only DB user password, whereby the study config creator can opt to not include the password in the JSON config file. Instead, participants need to manually enter the password to join the study when registering their AWARE-Light installation.
 - Added screen reader (Screentext) sensor, which captures the text content of a user's screen.
+- Optional collection of notification message content
 
 4.0.821.light.bundle
 - Added the 'sensor sensor' function, which creates a record in the aware_log table when a user turns any of the sensors on/off.
