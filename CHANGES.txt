@@ -1,5 +1,8 @@
 Change log for AWARE-Light
 
+4.1.4.beta
+- Screen reader function improved preformance
+
 4.1.3.beta
 - Fixed bug for random EMA triggered condition
 
