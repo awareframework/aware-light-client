@@ -441,8 +441,14 @@ public class StudyUtils extends IntentService {
                     }
                     break;
                 case "random":
-                    schedule.addHour(scheduleJson.getInt("firsthour"))
-                            .addHour(scheduleJson.getInt("lasthour"))
+                    String firstHourString = scheduleJson.getString("firsthour");
+                    int firstHour = Integer.parseInt(firstHourString.split(":")[0]);
+
+                    String lastHourString = scheduleJson.getString("lasthour");
+                    int lastHour = Integer.parseInt(lastHourString.split(":")[0]);
+
+                    schedule.addHour(firstHour)
+                            .addHour(lastHour)
                             .random(scheduleJson.getInt("randomCount"),
                                     scheduleJson.getInt("randomInterval"));
                     break;
