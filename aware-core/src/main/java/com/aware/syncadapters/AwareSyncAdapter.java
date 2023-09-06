@@ -71,6 +71,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
         highFrequencySensors.add("rotation");
         highFrequencySensors.add("temperature");
         highFrequencySensors.add("proximity");
+        highFrequencySensors.add("screentext");
 
         dontClearSensors.add("aware_studies");
     }
@@ -377,30 +378,6 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
                 return true; //first time synching.
         }
         return false;
-    }
-
-    // TODO: Remove this function as tables will be created during database initialization
-    private String createRemoteTable(String DEVICE_ID, String TABLES_FIELDS, Boolean WEBSERVICE_SIMPLE, String protocol, Context mContext, String WEBSERVER, String DATABASE_TABLE) {
-        //Check first if we have database table remotely, otherwise create it!
-        Hashtable<String, String> fields = new Hashtable<>();
-        fields.put(Aware_Preferences.DEVICE_ID, DEVICE_ID);
-        fields.put("fields", TABLES_FIELDS);
-
-        String response = null;
-        // Do not run /create_table if webservice_simple == true
-        if (!WEBSERVICE_SIMPLE) {
-            //Create table if doesn't exist on the remote webservice server
-            if (protocol.equals("https")) {
-                try {
-                    response = new Https(SSLManager.getHTTPS(mContext, WEBSERVER)).dataPOST(WEBSERVER + "/" + DATABASE_TABLE + "/create_table", fields, true);
-                } catch (FileNotFoundException e) {
-                    response = null;
-                }
-            } else {
-                response = new Http().dataPOST(WEBSERVER + "/" + DATABASE_TABLE + "/create_table", fields, true);
-            }
-        }
-        return response;
     }
 
     private String[] getTableColumnsNames(Uri CONTENT_URI, Context mContext) {
