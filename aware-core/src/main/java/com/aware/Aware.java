@@ -212,7 +212,7 @@ public class Aware extends Service {
     /**
      * Variable for the Doze ignore list
      */
-    private static final int AWARE_BATTERY_OPTIMIZATION_ID = 567567;
+    public static final int AWARE_BATTERY_OPTIMIZATION_ID = 567567;
 
     /**
      * Holds a reference to the AWARE account, automatically restore in each plugin.
@@ -2663,6 +2663,9 @@ public class Aware extends Service {
     public static void stopAWARE(Context context) {
         if (context == null) return;
 
+        // Check if the activity is finishing
+        boolean isFinishing = ((Activity) context).isFinishing();
+
         Intent aware = new Intent(context, Aware.class);
         context.stopService(aware);
 
@@ -2694,6 +2697,16 @@ public class Aware extends Service {
         stopKeyboard(context);
         stopScreenText(context);
         stopScheduler(context);
+
+
+        // Handle based on whether it's user-initiated or system-initiated closure
+        if (isFinishing) {
+            // User initiated closure
+            Aware.debug(context, "AWARE-Light interface cleaned from the array of frequently used apps");
+        } else {
+            // System-initiated closure
+            Aware.debug(context, "AWARE-Light interface cleaned by smartphone system");
+        }
     }
 
     /**
