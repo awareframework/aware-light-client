@@ -1,5 +1,12 @@
 Change log for AWARE-Light
 
+4.1.5.light.bundle
+- Logging if the application is terminated by user actions or system actions to aware_log table
+- Screen reader function improved preformance
+
+4.1.4.light.bundle
+- same as 4.1.3.light.bundle
+
 4.1.3.light.bundle
 - Fixed bug for random EMA triggered condition
 - Screen reader function improved preformance
