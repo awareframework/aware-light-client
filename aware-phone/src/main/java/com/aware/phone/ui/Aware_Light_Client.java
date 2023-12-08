@@ -520,7 +520,7 @@ public class Aware_Light_Client extends Aware_Activity {
         if (!isFinishing) {
             if (isBatteryOptimizationIgnored(this, "com.aware.phone")) {
                 Log.d("AWARE-Light_Client", "AWARE-Light stopped from background: may caused by battery optimization");
-                Aware.debug(this, "AWARE-Light stopped from background: may caused by battery optimization");
+                Aware.debug(this, "AWARE-Light stopped from background: may be caused by battery optimization");
             } else {
                 Log.d("AWARE-Light_Client", "AWARE-Light stopped from background: may caused by system settings");
                 Aware.debug(this, "AWARE-Light stopped from background: may caused by system settings");
@@ -538,9 +538,9 @@ public class Aware_Light_Client extends Aware_Activity {
         // Handle based on whether it's user-initiated or system-initiated closure
         if (isFinishing) {
             // User initiated closure
-            Aware.debug(this, "AWARE-Light interface cleaned from the list of frequent used apps");
+            Aware.debug(this, "AWARE-Light interface cleaned from the list of frequently used apps");
         }
-        Log.d("AWARE-Light_Client", "AWARE-Light interface cleaned from the list of frequent used apps");
+        Log.d("AWARE-Light_Client", "AWARE-Light interface cleaned from the list of frequently used apps");
         super.onDestroy();
         unregisterReceiver(packageMonitor);
     }
