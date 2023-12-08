@@ -99,7 +99,7 @@ public class Applications extends AccessibilityService {
 
     int TEXT_BUFFER_LIMIT = 100;
 
-    int mDebugDepth = 0;
+//    int mDebugDepth = 0;
 
     private static int screenStatus = 0; //  ACTION_AWARE_SCREEN_OFF ACTION_AWARE_SCREEN_UNLOCKED
 
@@ -122,7 +122,6 @@ public class Applications extends AccessibilityService {
 
         // conditions to filter the meaningless input
         if (mNodeInfo.getText() != null && !mNodeInfo.getText().toString().equals("")){
-            currScreenText += mNodeInfo.getText() + "||"; // Add division sign for the tree
             Rect rect = new Rect();
 
             mNodeInfo.getBoundsInScreen(rect);
@@ -131,12 +130,12 @@ public class Applications extends AccessibilityService {
         }
 
         if (mNodeInfo.getChildCount() < 1) return;
-        mDebugDepth++;
+//        mDebugDepth++;
 
         for (int i = 0; i < mNodeInfo.getChildCount(); i++) {
             textTree(mNodeInfo.getChild(i));
         }
-        mDebugDepth--;
+//        mDebugDepth--;
     }
 
     /**
