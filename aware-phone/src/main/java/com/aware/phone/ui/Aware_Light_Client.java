@@ -519,11 +519,11 @@ public class Aware_Light_Client extends Aware_Activity {
         // Handle based on whether it's system-initiated closure
         if (!isFinishing) {
             if (isBatteryOptimizationIgnored(this, "com.aware.phone")) {
-                Log.d("AWARE-Light_Client", "AWARE-Light stopped from background: may caused by battery optimization");
+                Log.d("AWARE-Light_Client", "AWARE-Light stopped from background: may be caused by battery optimization");
                 Aware.debug(this, "AWARE-Light stopped from background: may be caused by battery optimization");
             } else {
-                Log.d("AWARE-Light_Client", "AWARE-Light stopped from background: may caused by system settings");
-                Aware.debug(this, "AWARE-Light stopped from background: may caused by system settings");
+                Log.d("AWARE-Light_Client", "AWARE-Light stopped from background: may be caused by system settings");
+                Aware.debug(this, "AWARE-Light stopped from background: may be caused by system settings");
             }
         }
         super.onStop();
