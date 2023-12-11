@@ -1,7 +1,10 @@
 package com.aware.phone.ui;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.Dialog;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -18,6 +21,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.preference.CheckBoxPreference;
 import android.preference.EditTextPreference;
 import android.preference.ListPreference;
@@ -51,10 +55,13 @@ import java.util.Set;
 import java.util.UUID;
 
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.PermissionChecker;
 
+import static com.aware.Aware.AWARE_NOTIFICATION_IMPORTANCE_GENERAL;
 import static com.aware.Aware.TAG;
+import static com.aware.Aware.setNotificationProperties;
 
 /**
  *
@@ -469,8 +476,71 @@ public class Aware_Light_Client extends Aware_Activity {
         if (prefs != null) prefs.unregisterOnSharedPreferenceChangeListener(this);
     }
 
+    public static boolean isBatteryOptimizationIgnored(Context context, String package_name) {
+        boolean is_ignored = true;
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP_MR1) {
+            PowerManager pm = (PowerManager) context.getApplicationContext().getSystemService(Context.POWER_SERVICE);
+            is_ignored = pm.isIgnoringBatteryOptimizations(package_name);
+        }
+
+        if (!is_ignored) {
+            NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(context, Aware.AWARE_NOTIFICATION_CHANNEL_GENERAL);
+            mBuilder.setSmallIcon(com.aware.R.drawable.ic_stat_aware_recharge);
+            mBuilder.setContentTitle(context.getApplicationContext().getResources().getString(com.aware.R.string.aware_activate_battery_optimize_ignore_title));
+            mBuilder.setContentText(context.getApplicationContext().getResources().getString(com.aware.R.string.aware_activate_battery_optimize_ignore));
+            mBuilder.setAutoCancel(true);
+            mBuilder.setOnlyAlertOnce(true); //notify the user only once
+            mBuilder.setDefaults(NotificationCompat.DEFAULT_ALL);
+            mBuilder = setNotificationProperties(mBuilder, AWARE_NOTIFICATION_IMPORTANCE_GENERAL);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                mBuilder.setChannelId(Aware.AWARE_NOTIFICATION_CHANNEL_GENERAL);
+
+            Intent batteryIntent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+            batteryIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+            PendingIntent clickIntent = PendingIntent.getActivity(context, 0, batteryIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+            mBuilder.setContentIntent(clickIntent);
+
+            NotificationManager notManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            notManager.notify(Aware.AWARE_BATTERY_OPTIMIZATION_ID, mBuilder.build());
+        }
+
+        Log.d(Aware.TAG, "Battery Optimizations: " + is_ignored);
+
+        return is_ignored;
+    }
+
+    @Override
+    protected void onStop() {
+        // Check if the activity is finishing
+        boolean isFinishing = this.isFinishing();
+
+        // Handle based on whether it's system-initiated closure
+        if (!isFinishing) {
+            if (isBatteryOptimizationIgnored(this, "com.aware.phone")) {
+                Log.d("AWARE-Light_Client", "AWARE-Light stopped from background: may be caused by battery optimization");
+                Aware.debug(this, "AWARE-Light stopped from background: may be caused by battery optimization");
+            } else {
+                Log.d("AWARE-Light_Client", "AWARE-Light stopped from background: may be caused by system settings");
+                Aware.debug(this, "AWARE-Light stopped from background: may be caused by system settings");
+            }
+        }
+        super.onStop();
+    }
+
+
     @Override
     protected void onDestroy() {
+        // Check if the activity is finishing
+        boolean isFinishing = this.isFinishing();
+
+        // Handle based on whether it's user-initiated or system-initiated closure
+        if (isFinishing) {
+            // User initiated closure
+            Aware.debug(this, "AWARE-Light interface cleaned from the list of frequently used apps");
+        }
+        Log.d("AWARE-Light_Client", "AWARE-Light interface cleaned from the list of frequently used apps");
         super.onDestroy();
         unregisterReceiver(packageMonitor);
     }
