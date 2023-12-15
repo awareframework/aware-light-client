@@ -133,7 +133,9 @@ public class Applications extends AccessibilityService {
             WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
             windowManager.getDefaultDisplay().getMetrics(displayMetrics);
             int screenWidth = displayMetrics.widthPixels; //pixel 7,8 expected: 1080 actual: 1080
-            int screenHeight = 2400;//displayMetrics.heightPixels; //pixel 7,8 expected: 2400 actual: 2138
+            //Current code excludes certain areas, so its value is smaller than actual height
+            //need to find a method that return actual height.
+            int screenHeight = displayMetrics.heightPixels; //pixel 7,8 expected: 2400 actual: 2138
             Log.v(TAG,"SCREENSIZE:\n" + "Width: " + screenWidth + ", Height: " + screenHeight);
 
             //check if a node is not transformed
