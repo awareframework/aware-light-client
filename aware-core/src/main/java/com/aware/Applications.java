@@ -18,7 +18,9 @@ import android.database.sqlite.SQLiteException;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -126,7 +128,29 @@ public class Applications extends AccessibilityService {
 
             mNodeInfo.getBoundsInScreen(rect);
 
-            currScreenText += mNodeInfo.getText() + "***" + rect.toString() + "||"; // Add division sign for the tree
+            //Get screen dimensions
+            DisplayMetrics displayMetrics = new DisplayMetrics();
+            WindowManager windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+            windowManager.getDefaultDisplay().getMetrics(displayMetrics);
+            int screenWidth = displayMetrics.widthPixels; //For Google pixel 7,8 expected: 1080 actual: 1080
+            //NOTE: heightPixels exclude areas that always display system info (e.g., navigation bar)
+            // Need to try AccessibilityNodeInfo.getBoundsInWindow (API34) or WindowMetrics.getBounds (API30) for actual size
+            int screenHeight = displayMetrics.heightPixels; //For Google pixel 7,8 expected: 2400 actual: 2138
+
+            //check if a node is not transformed (i.e., left and right / top and bottom coordinates are not flipped over.
+            if (rect.left < rect.right && rect.top < rect.bottom) {
+                //check if a node is visible to user
+                if (mNodeInfo.isVisibleToUser()) {
+                    //check if a node is partially visible
+                    if (rect.left < 0 || rect.right > screenWidth || rect.top < 0 ||
+                            rect.bottom > screenHeight) {
+                        //ignore text from partillay visible nodes
+                    } else {
+                        //Only collect text from fully visible nodes
+                        currScreenText += mNodeInfo.getText() + "***" + rect.toString() + "||"; // Add division sign for the tree
+                    }
+                }
+            }
         }
 
         if (mNodeInfo.getChildCount() < 1) return;
