@@ -1,5 +1,10 @@
 Change log for AWARE-Light
 
+4.1.6.beta
+
+- Fixed a crash that occurred when enabling accessibility before starting a study.
+- The screen text sensor now correctly collects duplicate text when the foreground app changes, ensuring that screen text is captured during app switches, home screen access, and notification checks.
+
 4.1.5.beta
 - Logging if the application is terminated by user actions or system actions to aware_log table
 
