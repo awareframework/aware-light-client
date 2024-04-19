@@ -124,7 +124,7 @@ dependencies {
     api(project(":com.aware.plugin.ambient_noise"))
     api(project(":com.aware.plugin.device_usage"))
     api(project(":com.aware.plugin.contacts_list"))
-    api(project(":com.aware.plugin.studentlife.audio"))
+    api(project(":com.aware.plugin.studentlife.audio_final"))
     api(project(":com.aware.plugin.fitbit"))
     api(project(":com.aware.plugin.google.activity_recognition"))
     api(project(":com.aware.plugin.google.auth"))
