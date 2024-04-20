@@ -33,6 +33,7 @@
     <string name="sensors_required">Sensors needed</string>
     <string name="sync_study_config">Check for study updates</string>
     <string name="sync_study_data">Sync data</string>
+    <string name="export_study_data">Export data</string>
     <string name="join_study">Join a study</string>
     <string name="quit_study">Quit study</string>
     <string name="sign_up">Sign Up!</string>

@@ -35,6 +35,10 @@ import android.util.Log;
 import android.view.ViewGroup;
 import android.widget.ListAdapter;
 import android.widget.Toast;
+import android.view.View;
+import android.widget.ListView;
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
 
 import com.aware.Applications;
 import com.aware.Aware;
@@ -63,6 +67,27 @@ import static com.aware.Aware.AWARE_NOTIFICATION_IMPORTANCE_GENERAL;
 import static com.aware.Aware.TAG;
 import static com.aware.Aware.setNotificationProperties;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import android.Manifest;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Environment;
+import android.view.View;
+import android.widget.Button;
+import android.widget.Toast;
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.documentfile.provider.DocumentFile;
+
 /**
  *
  */
@@ -71,7 +96,8 @@ public class Aware_Light_Client extends Aware_Activity {
     public static boolean permissions_ok;
     private static Hashtable<Integer, Boolean> listSensorType;
     private static SharedPreferences prefs;
-
+    public static final int REQUEST_CODE_OPEN_DIRECTORY = 1000;
+    public static final int REQUEST_CODE_STORAGE_PERMISSION = 1001;
     private static final ArrayList<String> REQUIRED_PERMISSIONS = new ArrayList<>();
     private static final Hashtable<String, Integer> optionalSensors = new Hashtable<>();
 
@@ -331,6 +357,149 @@ public class Aware_Light_Client extends Aware_Activity {
                     rootSensorPref.removePreference(parent);
                 }
             }
+        }
+    }
+
+    private void performExportToPublicDirectory() {
+        // Correct path to the external app-specific directory
+        File publicDirectory = new File(getExternalFilesDir(null), "AWARE");
+
+        if (!publicDirectory.exists()) {
+            if (!publicDirectory.mkdirs()) {
+                Log.e("export_data", "Failed to create directory: " + publicDirectory.getAbsolutePath());
+                return;
+            }
+        }
+
+        File[] files = publicDirectory.listFiles();
+        if (files == null || files.length == 0) {
+            Log.e("export_data", "No files found in directory: " + publicDirectory.getAbsolutePath());
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(Aware_Light_Client.this, "No files to export.", Toast.LENGTH_SHORT).show();
+                }
+            });
+            return;
+        }
+
+        Log.d("export_data", "resource folder path: \n" + publicDirectory.getAbsolutePath());
+
+
+        File exportDestination = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
+        for (final File file : files) {
+            Log.d("export_data", "File path: " + file.getAbsolutePath());
+            File newFile = new File(exportDestination, file.getName());
+            try (InputStream in = new FileInputStream(file);
+                 OutputStream out = new FileOutputStream(newFile)) {
+                byte[] buffer = new byte[1024];
+                int length;
+                while ((length = in.read(buffer)) > 0) {
+                    out.write(buffer, 0, length);
+                }
+                out.flush();
+            } catch (final IOException e) {
+                Log.e("export_data", "Failed to export: " + file.getName(), e);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(Aware_Light_Client.this, "Failed to export: " + file.getName(), Toast.LENGTH_SHORT).show();
+                    }
+                });
+                continue;
+            }
+        }
+
+        // Notify user of overall success
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(Aware_Light_Client.this, "All files exported successfully", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CODE_STORAGE_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                performExportToPublicDirectory();
+            } else {
+                // Handle the case where the user denies the permission
+                Toast.makeText(this, "Permission denied by the user", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == REQUEST_CODE_OPEN_DIRECTORY && resultCode == RESULT_OK) {
+            Uri treeUri = data.getData();
+            DocumentFile pickedDir = DocumentFile.fromTreeUri(this, treeUri);
+
+            // Accessing the external storage app-specific directory
+            File externalAppDirectory = new File(getExternalFilesDir(null), "AWARE");
+
+            Log.d("export_data", "External AWARE directory path: " + externalAppDirectory.getAbsolutePath());
+
+            File[] files = externalAppDirectory.listFiles();
+
+            if (files != null && files.length > 0) {
+                for (final File file : files) {
+                    Log.d("export_data", "Processing file: " + file.getAbsolutePath());
+                    try {
+                        DocumentFile newFile = pickedDir.createFile("application/octet-stream", file.getName());
+                        if (newFile != null) {
+                            try (InputStream in = new FileInputStream(file);
+                                 OutputStream out = getContentResolver().openOutputStream(newFile.getUri())) {
+                                byte[] buffer = new byte[1024];
+                                int length;
+                                while ((length = in.read(buffer)) > 0) {
+                                    out.write(buffer, 0, length);
+                                }
+                                out.flush();
+                            } // Automatically close streams
+                            // Notify user of success for each file
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    Toast.makeText(Aware_Light_Client.this, "Exported: " + file.getName(), Toast.LENGTH_SHORT).show();
+                                }
+                            });
+                        } else {
+                            throw new IOException("Failed to create document file for: " + file.getName());
+                        }
+                    } catch (final IOException e) {
+                        Log.e("export_data", "Failed to export: " + file.getName(), e);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(Aware_Light_Client.this, "Failed to export: " + file.getName(), Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    }
+                }
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(Aware_Light_Client.this, "All files exported successfully", Toast.LENGTH_LONG).show();
+                    }
+                });
+            } else {
+                Log.d("export_data", "No files found to export.");
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(Aware_Light_Client.this, "No files available to export.", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+            Log.d("export_data", "Output folder URI: " + pickedDir.getUri().toString());
         }
     }
 
