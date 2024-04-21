@@ -360,98 +360,79 @@ public class Aware_Light_Client extends Aware_Activity {
         }
     }
 
-    private void performExportToPublicDirectory() {
-        // Correct path to the external app-specific directory
-        File publicDirectory = new File(getExternalFilesDir(null), "AWARE");
-
-        if (!publicDirectory.exists()) {
-            if (!publicDirectory.mkdirs()) {
-                Log.e("export_data", "Failed to create directory: " + publicDirectory.getAbsolutePath());
-                return;
-            }
-        }
-
-        File[] files = publicDirectory.listFiles();
-        if (files == null || files.length == 0) {
-            Log.e("export_data", "No files found in directory: " + publicDirectory.getAbsolutePath());
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    Toast.makeText(Aware_Light_Client.this, "No files to export.", Toast.LENGTH_SHORT).show();
-                }
-            });
-            return;
-        }
-
-        Log.d("export_data", "resource folder path: \n" + publicDirectory.getAbsolutePath());
-
-
-        File exportDestination = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS);
-        for (final File file : files) {
-            Log.d("export_data", "File path: " + file.getAbsolutePath());
-            File newFile = new File(exportDestination, file.getName());
-            try (InputStream in = new FileInputStream(file);
-                 OutputStream out = new FileOutputStream(newFile)) {
-                byte[] buffer = new byte[1024];
-                int length;
-                while ((length = in.read(buffer)) > 0) {
-                    out.write(buffer, 0, length);
-                }
-                out.flush();
-            } catch (final IOException e) {
-                Log.e("export_data", "Failed to export: " + file.getName(), e);
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Toast.makeText(Aware_Light_Client.this, "Failed to export: " + file.getName(), Toast.LENGTH_SHORT).show();
-                    }
-                });
-                continue;
-            }
-        }
-
-        // Notify user of overall success
-        runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                Toast.makeText(Aware_Light_Client.this, "All files exported successfully", Toast.LENGTH_LONG).show();
-            }
-        });
+    /**
+     * Checks if the application is running on an emulator.
+     *
+     * @return true if the application is running on an emulator, false otherwise.
+     */
+    public static boolean isEmulator() {
+        // Check various properties to determine if the current environment is an emulator.
+        return Build.FINGERPRINT.startsWith("generic")
+                || Build.FINGERPRINT.startsWith("unknown")
+                || Build.MODEL.contains("google_sdk")
+                || Build.MODEL.contains("Emulator")
+                || Build.MODEL.contains("Android SDK built for x86")
+                || Build.MANUFACTURER.contains("Genymotion")
+                || (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic"))
+                || "google_sdk".equals(Build.PRODUCT);
     }
 
+    /**
+     * Retrieves the appropriate directory for the application's database file storage based on
+     * several conditions such as running environment (emulator or real device) and configuration settings.
+     *
+     * @return The File object pointing to the appropriate directory for database storage.
+     */
+    protected File getDatabaseFileFolder(){
+        Context context = this;  // Use the current instance to access the context methods.
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_CODE_STORAGE_PERMISSION) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                performExportToPublicDirectory();
+        File dataDirectory;
+
+        if (context.getResources().getBoolean(com.aware.R.bool.internalstorage)) {
+            // Use the internal storage directory assigned to the app which is private.
+            dataDirectory = context.getFilesDir();
+        } else if (!context.getResources().getBoolean(com.aware.R.bool.standalone)) {
+            // Use a directory on the external storage that remains after the app is uninstalled.
+            dataDirectory = new File(Environment.getExternalStoragePublicDirectory("AWARE").toString());
+        } else {
+            // Decide the storage location based on whether the environment is an emulator.
+            if (isEmulator()) {
+                // Use internal storage for emulators for simplicity.
+                dataDirectory =  context.getFilesDir();
             } else {
-                // Handle the case where the user denies the permission
-                Toast.makeText(this, "Permission denied by the user", Toast.LENGTH_SHORT).show();
+                // Use the external app-specific directory that is removed when the app is uninstalled.
+                dataDirectory = new File(ContextCompat.getExternalFilesDirs(context, null)[0] + "/AWARE");
             }
         }
+
+        return dataDirectory;
     }
 
-
+    /**
+     * This method checks if the result corresponds to the REQUEST_CODE_OPEN_DIRECTORY and if
+     * the result code indicates success. If so, it proceeds to export files from a specified
+     * internal directory to the selected external directory.
+     */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
+        // Check if the result comes from the correct request and has a successful result code
         if (requestCode == REQUEST_CODE_OPEN_DIRECTORY && resultCode == RESULT_OK) {
             Uri treeUri = data.getData();
             DocumentFile pickedDir = DocumentFile.fromTreeUri(this, treeUri);
 
-            // Accessing the external storage app-specific directory
-            File externalAppDirectory = new File(getExternalFilesDir(null), "AWARE");
+            // Retrieve the directory for storing database files
+            File externalAppDirectory = getDatabaseFileFolder();
 
-            Log.d("export_data", "External AWARE directory path: " + externalAppDirectory.getAbsolutePath());
+
+            // Log.d("export_data", "External AWARE directory path: " + externalAppDirectory.getAbsolutePath());
 
             File[] files = externalAppDirectory.listFiles();
 
             if (files != null && files.length > 0) {
                 for (final File file : files) {
-                    Log.d("export_data", "Processing file: " + file.getAbsolutePath());
+                    // Log.d("export_data", "Processing file: " + file.getAbsolutePath());
                     try {
                         DocumentFile newFile = pickedDir.createFile("application/octet-stream", file.getName());
                         if (newFile != null) {
@@ -463,8 +444,7 @@ public class Aware_Light_Client extends Aware_Activity {
                                     out.write(buffer, 0, length);
                                 }
                                 out.flush();
-                            } // Automatically close streams
-                            // Notify user of success for each file
+                            }
                             runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
@@ -475,7 +455,7 @@ public class Aware_Light_Client extends Aware_Activity {
                             throw new IOException("Failed to create document file for: " + file.getName());
                         }
                     } catch (final IOException e) {
-                        Log.e("export_data", "Failed to export: " + file.getName(), e);
+                        // Log.e("export_data", "Failed to export: " + file.getName(), e);
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
@@ -491,7 +471,7 @@ public class Aware_Light_Client extends Aware_Activity {
                     }
                 });
             } else {
-                Log.d("export_data", "No files found to export.");
+                // Log.d("export_data", "No files found to export.");
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -499,7 +479,7 @@ public class Aware_Light_Client extends Aware_Activity {
                     }
                 });
             }
-            Log.d("export_data", "Output folder URI: " + pickedDir.getUri().toString());
+            // Log.d("export_data", "Output folder URI: " + pickedDir.getUri().toString());
         }
     }
 
