@@ -97,6 +97,8 @@ public class Applications extends AccessibilityService {
 
     ArrayList<Integer> textBuffer = new ArrayList<Integer>();
 
+    ArrayList<Integer> textBuffer_app_change = new ArrayList<>();
+
     int TEXT_BUFFER_LIMIT = 100;
 
     private String previousForegroundApp = "";
@@ -170,11 +172,8 @@ public class Applications extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event.getPackageName() == null) return;
 
-
-
-
-        // if text buffer is full then send all contents in the content buffer
-        if (textBuffer.size() == TEXT_BUFFER_LIMIT){
+        // if content buffer is full then send all contents in the content buffer
+        if (contentBuffer.size() == TEXT_BUFFER_LIMIT){
 
 
             for (ContentValues content: contentBuffer){
@@ -185,6 +184,7 @@ public class Applications extends AccessibilityService {
                 sendBroadcast(screen_text_data);
             }
             textBuffer.clear();
+            textBuffer_app_change.clear();
             contentBuffer.clear();
         }
 
@@ -225,15 +225,6 @@ public class Applications extends AccessibilityService {
             // Get the current foreground app
             String currentForegroundApp = event.getPackageName().toString();
 
-            // Check if the foreground app has changed
-            if (!currentForegroundApp.equals(previousForegroundApp)) {
-                // Clear the text buffer
-                textBuffer.clear();
-
-                // Update the previous foreground app
-                previousForegroundApp = currentForegroundApp;
-            }
-
             // Get text tree
             AccessibilityNodeInfo mNodeInfo = event.getSource();
             textTree(mNodeInfo);
@@ -261,14 +252,23 @@ public class Applications extends AccessibilityService {
 
                 int hashedText = currScreenText.hashCode();
 
-                // Add to content: get rid of the duplicate text
-                if (!textBuffer.contains(hashedText)) {
-                    textBuffer.add(hashedText);
+                // Check if the foreground app has changed
+                if (!currentForegroundApp.equals(previousForegroundApp)) {
+
+                    // Update the previous foreground app
+                    previousForegroundApp = currentForegroundApp;
+
+                    // Add to content: get rid of the duplicate text
+                    if (!textBuffer_app_change.contains(hashedText)){
+                        textBuffer_app_change.add(hashedText);
+                    }
                     contentBuffer.add(screenText);
 
-                    // Log the current screen text for debugging
-                    if (Aware.DEBUG){
-                        Log.d("AWARE::ScreenText", "Current Screen Text: " + currScreenText);
+                } else {
+                    // Add to content: get rid of the duplicate text
+                    if (!textBuffer.contains(hashedText) && !textBuffer_app_change.contains(hashedText)) {
+                        textBuffer.add(hashedText);
+                        contentBuffer.add(screenText);
                     }
                 }
 
