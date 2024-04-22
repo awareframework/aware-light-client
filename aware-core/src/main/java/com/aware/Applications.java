@@ -41,8 +41,11 @@ import com.aware.utils.Scheduler;
 import org.json.JSONException;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+
 import android.graphics.Rect;
 
 /**
@@ -95,7 +98,7 @@ public class Applications extends AccessibilityService {
 
     ArrayList<ContentValues> contentBuffer = new ArrayList<ContentValues>();
 
-    ArrayList<Integer> textBuffer = new ArrayList<Integer>();
+    Set<Integer> textBuffer = new HashSet<>();
 
     int TEXT_BUFFER_LIMIT = 100;
 
@@ -170,12 +173,9 @@ public class Applications extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event.getPackageName() == null) return;
 
-
-
-
-        // if text buffer is full then send all contents in the content buffer
-        if (textBuffer.size() == TEXT_BUFFER_LIMIT){
-
+        // if content buffer is full then send all contents in the content buffer
+        if (contentBuffer.size() == TEXT_BUFFER_LIMIT){
+            // Log.d("Screen_Text", "==========LIMIT REACH============");
 
             for (ContentValues content: contentBuffer){
                 getContentResolver().insert(ScreenText_Provider.ScreenTextData.CONTENT_URI, content);
@@ -186,6 +186,8 @@ public class Applications extends AccessibilityService {
             }
             textBuffer.clear();
             contentBuffer.clear();
+
+            // Log.d("Screen_Text", "==========CLEAN BUFFER============");
         }
 
 
@@ -225,15 +227,6 @@ public class Applications extends AccessibilityService {
             // Get the current foreground app
             String currentForegroundApp = event.getPackageName().toString();
 
-            // Check if the foreground app has changed
-            if (!currentForegroundApp.equals(previousForegroundApp)) {
-                // Clear the text buffer
-                textBuffer.clear();
-
-                // Update the previous foreground app
-                previousForegroundApp = currentForegroundApp;
-            }
-
             // Get text tree
             AccessibilityNodeInfo mNodeInfo = event.getSource();
             textTree(mNodeInfo);
@@ -261,14 +254,38 @@ public class Applications extends AccessibilityService {
 
                 int hashedText = currScreenText.hashCode();
 
-                // Add to content: get rid of the duplicate text
-                if (!textBuffer.contains(hashedText)) {
-                    textBuffer.add(hashedText);
-                    contentBuffer.add(screenText);
+                // Check if the foreground app has changed
+                if (!currentForegroundApp.equals(previousForegroundApp)) {
+//                    // Log.d("Screen_Text", "==========App Switch============");
+                    if (!textBuffer.contains(hashedText)) {
+                        textBuffer.add(hashedText);
+                        contentBuffer.add(screenText);
+//                       // Log.d("Screen_Text", "Add ContentText: " + currScreenText);
+                    }
 
-                    // Log the current screen text for debugging
-                    if (Aware.DEBUG){
-                        Log.d("AWARE::ScreenText", "Current Screen Text: " + currScreenText);
+
+                    // Log.d("Screen_Text", "Current ContentBuffer Size: " + contentBuffer.size());
+
+                    for (ContentValues content: contentBuffer){
+                        getContentResolver().insert(ScreenText_Provider.ScreenTextData.CONTENT_URI, content);
+
+                        if (awareSensor != null) awareSensor.onScreentext(content);
+                        Intent screen_text_data = new Intent(ScreenText.ACTION_SCREENTEXT_DETECT);
+                        sendBroadcast(screen_text_data);
+                    }
+
+                    textBuffer.clear();
+                    contentBuffer.clear();
+                    // Log.d("Screen_Text", "==========CLEAN BUFFER============");
+                    // Update the previous foreground app
+                    previousForegroundApp = currentForegroundApp;
+
+                } else {
+                    // Add to content: get rid of the duplicate text
+                    if (!textBuffer.contains(hashedText)) {
+                        textBuffer.add(hashedText);
+                        contentBuffer.add(screenText);
+                        // Log.d("Screen_Text", "Add ContentText: " + currScreenText);
                     }
                 }
 
