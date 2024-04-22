@@ -123,7 +123,7 @@ public class ExportDataPref extends Preference {
     }
 
     /**
-     * Exports all files from the application-specific directory to a public directory.
+     * Exports all files from the application-specific directory to a public directory. (Below Android API 28)
      * This method attempts to export all files located in the app's private database file folder
      * to a designated public directory within the device's "Downloads" directory.
      */
@@ -169,6 +169,8 @@ public class ExportDataPref extends Preference {
                  Log.e("export_data", "Failed to export: " + file.getName(), e);
             }
         }
+
+        Toast.makeText(getContext(), "Data saved at Downloads/AWARE", Toast.LENGTH_SHORT).show();
 
     }
 
