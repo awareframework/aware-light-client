@@ -134,6 +134,7 @@ dependencies {
     api(project(":com.aware.plugin.sensortag"))
     api(project(":com.aware.plugin.sentimental"))
     implementation 'com.android.support:support-v4:28.0.0'
+    implementation 'androidx.annotation:annotation:1.2.0'
 }
 
 repositories {

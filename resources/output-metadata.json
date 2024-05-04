@@ -15,8 +15,8 @@
           "value": "x86_64"
         }
       ],
-      "versionCode": 6,
-      "versionName": "4.1.6.beta",
+      "versionCode": 1,
+      "versionName": "4.2.1.beta",
       "outputFile": "aware-phone-x86_64-release.apk"
     },
     {
@@ -27,8 +27,8 @@
           "value": "x86"
         }
       ],
-      "versionCode": 6,
-      "versionName": "4.1.6.beta",
+      "versionCode": 1,
+      "versionName": "4.2.1.beta",
       "outputFile": "aware-phone-x86-release.apk"
     },
     {
@@ -39,21 +39,9 @@
           "value": "armeabi"
         }
       ],
-      "versionCode": 6,
-      "versionName": "4.1.6.beta",
+      "versionCode": 1,
+      "versionName": "4.2.1.beta",
       "outputFile": "aware-phone-armeabi-release.apk"
-    },
-    {
-      "type": "ONE_OF_MANY",
-      "filters": [
-        {
-          "filterType": "ABI",
-          "value": "armeabi-v7a"
-        }
-      ],
-      "versionCode": 6,
-      "versionName": "4.1.6.beta",
-      "outputFile": "aware-phone-armeabi-v7a-release.apk"
     },
     {
       "type": "ONE_OF_MANY",
@@ -63,9 +51,21 @@
           "value": "arm64-v8a"
         }
       ],
-      "versionCode": 6,
-      "versionName": "4.1.6.beta",
+      "versionCode": 1,
+      "versionName": "4.2.1.beta",
       "outputFile": "aware-phone-arm64-v8a-release.apk"
+    },
+    {
+      "type": "ONE_OF_MANY",
+      "filters": [
+        {
+          "filterType": "ABI",
+          "value": "armeabi-v7a"
+        }
+      ],
+      "versionCode": 1,
+      "versionName": "4.2.1.beta",
+      "outputFile": "aware-phone-armeabi-v7a-release.apk"
     }
   ]
 }

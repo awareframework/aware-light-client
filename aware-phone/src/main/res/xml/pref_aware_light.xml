@@ -775,6 +775,9 @@
             android:key="study_info_pref" />
         <com.aware.phone.ui.prefs.StudySyncPref
             android:key="study_sync_pref" />
+        <com.aware.phone.ui.prefs.ExportDataPref
+            android:key="export_data_pref" />
+
         <com.aware.phone.ui.prefs.QuitStudyPref
             android:key="study_quit_button" />
 

@@ -1,5 +1,9 @@
 Change log for AWARE-Light
 
+4.2.1.beta
+
+- New feature to export the aware-light database files to the device's storage.
+
 4.1.6.beta
 
 - Fixed a crash that occurred when enabling accessibility before starting a study.
@@ -9,11 +13,11 @@ Change log for AWARE-Light
 - Logging if the application is terminated by user actions or system actions to aware_log table
 
 4.1.4.beta
-- Screen reader function improved preformance
+- Screen reader function improved performance
 
 4.1.3.light.bundle
 - Fixed bug for random EMA triggered condition
-- Screen reader function improved preformance
+- Screen reader function improved performance
 
 4.1.2.light.bundle
 - Screen reader table allows longer text to be stored
