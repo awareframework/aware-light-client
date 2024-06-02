@@ -41,6 +41,7 @@ import com.aware.utils.Scheduler;
 import org.json.JSONException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -107,6 +108,7 @@ public class Applications extends AccessibilityService {
     private static String foregroundPackageName = "";
 
 
+    private static List<Integer> sensitiveInputType = Arrays.asList(129, 225, 145);
 //    int mDebugDepth = 0;
 
     private static int screenStatus = 0; //  ACTION_AWARE_SCREEN_OFF ACTION_AWARE_SCREEN_UNLOCKED
@@ -131,10 +133,17 @@ public class Applications extends AccessibilityService {
         // conditions to filter the meaningless input
         if (mNodeInfo.getText() != null && !mNodeInfo.getText().toString().equals("")){
             Rect rect = new Rect();
+            // check is password, check inputtype is (129, )
+            String viewId = mNodeInfo.getViewIdResourceName();
 
-            mNodeInfo.getBoundsInScreen(rect);
 
-            currScreenText += mNodeInfo.getText() + "***" + rect.toString() + "||"; // Add division sign for the tree
+            if (!mNodeInfo.isPassword()  && !sensitiveInputType.contains(mNodeInfo.getInputType())){
+                if ((viewId != null && !viewId.matches("(?i).*password.*")) | viewId == null){
+                    mNodeInfo.getBoundsInScreen(rect);
+
+                    currScreenText += mNodeInfo.getText() + "***" + rect.toString() + "||"; // Add division sign for the tree
+                }
+            }
         }
 
         if (mNodeInfo.getChildCount() < 1) return;
