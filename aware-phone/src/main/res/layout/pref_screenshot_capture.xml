@@ -6,10 +6,10 @@
     android:padding="5dp">
 
     <Button
-        android:id="@+id/btn_export_study_data"
+        android:id="@+id/btn_enable_screenshot_capture"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/primaryDark"
-        android:text="@string/export_study_data"
+        android:text="Screenshot Capture"
         android:textColor="@android:color/white" />
 </LinearLayout>

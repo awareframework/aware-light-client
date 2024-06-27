@@ -17,6 +17,7 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
+import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
@@ -87,6 +88,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
+import com.aware.phone.ui.prefs.ScreenshotCapturePref;
+import com.aware.phone.ui.Services.ScreenshotCaptureService;
 
 /**
  *
@@ -96,10 +99,13 @@ public class Aware_Light_Client extends Aware_Activity {
     public static boolean permissions_ok;
     private static Hashtable<Integer, Boolean> listSensorType;
     private static SharedPreferences prefs;
+
+    private static final int REQUEST_CODE = 100;
     public static final int REQUEST_CODE_OPEN_DIRECTORY = 1000;
     public static final int REQUEST_CODE_STORAGE_PERMISSION = 1001;
     private static final ArrayList<String> REQUIRED_PERMISSIONS = new ArrayList<>();
     private static final Hashtable<String, Integer> optionalSensors = new Hashtable<>();
+    private MediaProjectionManager projectionManager;
 
     private final Aware.AndroidPackageMonitor packageMonitor = new Aware.AndroidPackageMonitor();
 
@@ -180,6 +186,8 @@ public class Aware_Light_Client extends Aware_Activity {
             whitelisting.setData(Uri.parse("package:" + getPackageName()));
             startActivity(whitelisting);
         }
+
+        projectionManager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
     }
 
     @Override
@@ -480,6 +488,17 @@ public class Aware_Light_Client extends Aware_Activity {
                 });
             }
             // Log.d("export_data", "Output folder URI: " + pickedDir.getUri().toString());
+        }
+
+        if (requestCode == ScreenshotCapturePref.REQUEST_CODE_SCREENSHOT && resultCode == RESULT_OK) {
+            Log.d(TAG, "Starting ScreenCaptureService with result data");
+            Intent intent = new Intent(this, ScreenshotCaptureService.class);
+            intent.putExtra(ScreenshotCaptureService.MEDIA_PROJECTION_RESULT_CODE, resultCode);
+            intent.putExtra(ScreenshotCaptureService.MEDIA_PROJECTION_RESULT_DATA, data);
+            ContextCompat.startForegroundService(this, intent);
+        } else {
+            Toast.makeText(this, "Screen capture permission denied.", Toast.LENGTH_SHORT).show();
+            Log.d(TAG, "Screen capture permission denied");
         }
     }
 

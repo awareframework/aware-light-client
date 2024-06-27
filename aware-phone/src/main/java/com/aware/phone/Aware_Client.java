@@ -50,6 +50,8 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
     private static Hashtable<Integer, Boolean> listSensorType;
     private static SharedPreferences prefs;
 
+    private static final int REQUEST_CODE = 100;
+
     private static final ArrayList<String> REQUIRED_PERMISSIONS = new ArrayList<>();
     private static final Hashtable<String, Integer> optionalSensors = new Hashtable<>();
 
@@ -124,6 +126,7 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
             whitelisting.setData(Uri.parse("package:" + getPackageName()));
             startActivity(whitelisting);
         }
+
     }
 
     @Override
