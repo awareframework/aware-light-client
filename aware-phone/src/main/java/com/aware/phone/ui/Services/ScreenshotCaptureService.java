@@ -177,9 +177,8 @@ public class ScreenshotCaptureService extends Service {
             @Override
             public void onStop() {
                 Log.d(TAG, "MediaProjection stopped");
-                virtualDisplay.release();
-                imageReader.setOnImageAvailableListener(null, null);
-                super.onStop();
+                cleanupResources();
+                stopSelf();
             }
         }, null);
 
@@ -304,17 +303,31 @@ public class ScreenshotCaptureService extends Service {
         }
     }
 
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        unregisterReceiver(screenStateReceiver);
+    /**
+     * Cleans up resources when the service is stopped or media projection is stopped.
+     */
+    private void cleanupResources() {
+        Log.d(TAG, "Cleaning up resources");
         stopCapturing();
         if (handlerThread != null) {
             handlerThread.quitSafely();
         }
+        if (imageReader != null) {
+            imageReader.close();
+        }
+        if (virtualDisplay != null) {
+            virtualDisplay.release();
+        }
         if (mediaProjection != null) {
             mediaProjection.stop();
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        unregisterReceiver(screenStateReceiver);
+        cleanupResources();
     }
 
     @Override
