@@ -453,6 +453,8 @@ public class Aware_Preferences {
 
     public static final String COMPRESS_RATE = "compress_rate";
 
+    public static final String STATUS_SCREENSHOT_LOCAL_STORAGE = "status_screenshot_local_storage";
+
 
 
     /**

@@ -61,6 +61,7 @@ public class ScreenshotCaptureService extends Service {
     private int compressionRate;
     private boolean isScreenOff = false;
     private long lastCaptureTime = 0;
+    private int capture_delay = 3000;
 
     private BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
         @Override
@@ -211,19 +212,19 @@ public class ScreenshotCaptureService extends Service {
             Log.d(TAG, "CaptureRunnable running");
             if (!isScreenOff) {
                 long currentTime = System.currentTimeMillis();
-                if (currentTime - lastCaptureTime >= 5000 || retryCount > 0) { // Ensure 5 seconds interval
+                if (currentTime - lastCaptureTime >= capture_delay || retryCount > 0) { // Ensure 5 seconds interval
                     Image image = imageReader.acquireLatestImage();
                     if (image != null) {
                         retryCount = 0;
                         lastCaptureTime = currentTime;
                         processImage(image);
                         image.close();
-                        handler.postDelayed(this, 5000); // Schedule the next capture in 5 seconds
+                        handler.postDelayed(this, capture_delay); // Schedule the next capture in 5 seconds
                     } else {
                         Log.e(TAG, "Failed to capture image: image is null");
                         resetImageReader();
                         retryCount++;
-                        int retryDelay = Math.min(5000, retryCount * 100); // Backoff strategy: max 5 seconds
+                        int retryDelay = Math.min(capture_delay, retryCount * 100); // Backoff strategy: max 5 seconds
                         handler.postDelayed(this, retryDelay); // Retry after a delay
                     }
                 } else {

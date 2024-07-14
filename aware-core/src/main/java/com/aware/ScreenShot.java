@@ -1,11 +1,11 @@
 package com.aware;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
@@ -19,6 +19,7 @@ import android.media.Image;
 import android.media.ImageReader;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
@@ -28,12 +29,10 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.WindowManager;
 
-import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
 
-import com.aware.providers.Screenshot_Provider;
+import com.aware.providers.ScreenShot_Provider;
 import com.aware.utils.Aware_Sensor;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -44,6 +43,9 @@ import java.util.Date;
 import java.util.Locale;
 
 public class ScreenShot extends Aware_Sensor {
+    public static final String CAPTURE_TIME_INTERVAL = "capture_time_interval";
+    public static final String COMPRESS_RATE = "compress_rate";
+    public static final String STATUS_SCREENSHOT_LOCAL_STORAGE = "status_screenshot_local_storage";
     private static final String TAG = "ScreenShot";
     public static final String MEDIA_PROJECTION_RESULT_CODE = "MEDIA_PROJECTION_RESULT_CODE";
     public static final String MEDIA_PROJECTION_RESULT_DATA = "MEDIA_PROJECTION_RESULT_DATA";
@@ -67,8 +69,9 @@ public class ScreenShot extends Aware_Sensor {
     private long lastCaptureTime = 0;
     private int capture_delay = 3000;
     private int compressionRate = 20;
+    private boolean saveToLocalStorage = true;
 
-    private BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent.getAction() != null) {
@@ -94,8 +97,8 @@ public class ScreenShot extends Aware_Sensor {
 
         AUTHORITY = ""; // Set this if needed
 
-        REQUIRED_PERMISSIONS.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
-        REQUIRED_PERMISSIONS.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
+        REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        REQUIRED_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
 
         createNotificationChannel();
         registerScreenStateReceiver();
@@ -114,8 +117,17 @@ public class ScreenShot extends Aware_Sensor {
         if (resultCode != Activity.RESULT_CANCELED && data != null) {
             mediaProjectionResultCode = resultCode;
             mediaProjectionResultData = data;
-            startForegroundService(resultCode, data);
-        } else if (mediaProjectionResultCode != 0 && mediaProjectionResultData != null) {
+        }
+
+        capture_delay = intent.getIntExtra(CAPTURE_TIME_INTERVAL, capture_delay);
+        compressionRate = intent.getIntExtra(COMPRESS_RATE, compressionRate);
+        saveToLocalStorage = intent.getBooleanExtra(STATUS_SCREENSHOT_LOCAL_STORAGE, saveToLocalStorage);
+
+        Log.d("ScreenShot", "Capture delay: " + capture_delay + "ms");
+        Log.d("ScreenShot", "Compression rate: " + compressionRate + "%");
+        Log.d("ScreenShot", "Save to local storage: " + saveToLocalStorage);
+
+        if (mediaProjectionResultCode != 0 && mediaProjectionResultData != null) {
             startForegroundService(mediaProjectionResultCode, mediaProjectionResultData);
         } else {
             stopSelf();
@@ -154,7 +166,7 @@ public class ScreenShot extends Aware_Sensor {
 
         Notification notification = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setContentTitle("Screen Capture")
-                .setContentText("Capturing screen every 5 seconds...")
+                .setContentText("Capturing screen every " + (capture_delay / 1000) + " seconds...")
                 .setSmallIcon(R.drawable.ic_stat_deny)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .addAction(R.drawable.ic_stat_deny, "Stop Capture", pStopSelf)
@@ -203,6 +215,7 @@ public class ScreenShot extends Aware_Sensor {
         handler.post(captureRunnable);
     }
 
+
     private final Runnable captureRunnable = new Runnable() {
         private int retryCount = 0;
         @Override
@@ -239,27 +252,7 @@ public class ScreenShot extends Aware_Sensor {
         virtualDisplay.setSurface(imageReader.getSurface());
     }
 
-    /**
-     * Processes the captured image and saves it to a file.
-     *
-     * @param image The captured image.
-     */
-    private void processImage(Image image) {
-        try {
-            Image.Plane[] planes = image.getPlanes();
-            ByteBuffer buffer = planes[0].getBuffer();
-            int pixelStride = planes[0].getPixelStride();
-            int rowStride = planes[0].getRowStride();
-            int rowPadding = rowStride - pixelStride * width;
 
-            Bitmap bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
-            bitmap.copyPixelsFromBuffer(buffer);
-
-            saveBitmap(bitmap);
-        } catch (Exception e) {
-            Log.e(TAG, "Error processing image", e);
-        }
-    }
 
     /**
      * Saves the bitmap to a file in the Downloads directory.
@@ -292,38 +285,53 @@ public class ScreenShot extends Aware_Sensor {
         Log.d(TAG, "File size: " + fileSizeInMB + " MB");
     }
 
-//    private void processImage(Image image) {
-//        try {
-//            Image.Plane[] planes = image.getPlanes();
-//            ByteBuffer buffer = planes[0].getBuffer();
-//            int pixelStride = planes[0].getPixelStride();
-//            int rowStride = planes[0].getRowStride();
-//            int rowPadding = rowStride - pixelStride * width;
-//
-//            Bitmap bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
-//            bitmap.copyPixelsFromBuffer(buffer);
-//
-//            byte[] imageData = convertBitmapToByteArray(bitmap);
-//            storeScreenshotMetadata(imageData);
-//        } catch (Exception e) {
-//            Log.e(TAG, "Error processing image", e);
-//        }
-//    }
-//
-//    private byte[] convertBitmapToByteArray(Bitmap bitmap) {
-//        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-//        bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
-//        return stream.toByteArray();
-//    }
-//
-//    private void storeScreenshotMetadata(byte[] imageData) {
-//        ContentValues values = new ContentValues();
-//        values.put(Screenshot_Provider.ScreenshotData.TIMESTAMP, System.currentTimeMillis());
-//        values.put(Screenshot_Provider.ScreenshotData.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-//        values.put(Screenshot_Provider.ScreenshotData.IMAGE_DATA, imageData);
-//
-//        getContentResolver().insert(Screenshot_Provider.ScreenshotData.CONTENT_URI, values);
-//    }
+    /**
+     * Processes the captured image and saves it to a file.
+     *
+     * @param image The captured image.
+     */
+    private void processImage(Image image) {
+        try {
+            Image.Plane[] planes = image.getPlanes();
+            ByteBuffer buffer = planes[0].getBuffer();
+            int pixelStride = planes[0].getPixelStride();
+            int rowStride = planes[0].getRowStride();
+            int rowPadding = rowStride - pixelStride * width;
+
+            Bitmap bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
+            bitmap.copyPixelsFromBuffer(buffer);
+
+            Log.d("Sceenshot", "Save screenshot to local storage: " + saveToLocalStorage);
+            if (saveToLocalStorage){
+                saveBitmap(bitmap);
+            } else {
+                byte[] imageData = convertBitmapToByteArray(bitmap);
+                storeScreenshotMetadata(imageData);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error processing image", e);
+        }
+    }
+
+    private byte[] convertBitmapToByteArray(Bitmap bitmap) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, stream);
+        return stream.toByteArray();
+    }
+
+    private void storeScreenshotMetadata(byte[] imageData) {
+        ContentValues values = new ContentValues();
+        values.put(ScreenShot_Provider.ScreenshotData.TIMESTAMP, System.currentTimeMillis());
+        values.put(ScreenShot_Provider.ScreenshotData.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+        values.put(ScreenShot_Provider.ScreenshotData.IMAGE_DATA, imageData);
+
+        Log.d("ScreenShot", "Timestamp: " + values.getAsLong(ScreenShot_Provider.ScreenshotData.TIMESTAMP));
+        Log.d("ScreenShot", "Device ID: " + values.getAsString(ScreenShot_Provider.ScreenshotData.DEVICE_ID));
+        Log.d("ScreenShot", "Image data size: " + imageData.length + " bytes");
+        Log.d("ScreenShot", "URL: " + ScreenShot_Provider.ScreenshotData.CONTENT_URI);
+
+        getContentResolver().insert(ScreenShot_Provider.ScreenshotData.CONTENT_URI, values);
+    }
 
     private void stopCapturing() {
         if (handler != null && captureRunnable != null) {
