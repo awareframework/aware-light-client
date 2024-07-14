@@ -66,6 +66,7 @@
     <string name="sensor_timezone">Timezone</string>
     <string name="sensor_battery">Battery</string>
     <string name="sensor_screen">Screen</string>
+    <string name="sensor_screenshot">Screenshot</string>
     <string name="sensor_network_usage">Network</string>
     <string name="sensor_communications">Communications (call/text)</string>
     <string name="sensor_keyboard">Keyboard</string>

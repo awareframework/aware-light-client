@@ -770,11 +770,20 @@
             android:key="screenshot"
             android:summary="screenshot capture"
             android:title="Screenshot">
+
             <CheckBoxPreference
                 android:defaultValue="false"
                 android:key="status_screenshot"
                 android:persistent="true"
                 android:title="Active" />
+
+            <CheckBoxPreference
+                android:defaultValue="true"
+                android:key="status_screenshot_local_storage"
+                android:persistent="true"
+                android:title="Save Screenshot to Local Storage"
+                android:summary="If checked, screenshots will be saved locally. Otherwise, they will be uploaded to the database." />
+
         </PreferenceScreen>
     </PreferenceCategory>
 
