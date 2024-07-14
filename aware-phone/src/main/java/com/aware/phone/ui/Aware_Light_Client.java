@@ -1,6 +1,7 @@
 package com.aware.phone.ui;
 
 import android.Manifest;
+import android.app.ActivityManager;
 import android.app.Dialog;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -32,6 +33,7 @@ import android.preference.PreferenceGroup;
 import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.ViewGroup;
 import android.widget.ListAdapter;
@@ -108,6 +110,7 @@ public class Aware_Light_Client extends Aware_Activity {
         if (Aware.isStudy(getApplicationContext())) {
             addPreferencesFromResource(R.xml.pref_aware_light);
         } else {
+
             addPreferencesFromResource(R.xml.pref_aware_device);
         }
 //        hideUnusedPreferences();
@@ -371,9 +374,16 @@ public class Aware_Light_Client extends Aware_Activity {
     }
 
     private void checkAndStartScreenshotService() {
+        if (!isAccessibilityServiceEnabled(this, Applications.class)) {
+            enableAccessibilityService();
+            return;
+        }
+
         if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
             if (ScreenShot.mediaProjectionResultCode != 0 && ScreenShot.mediaProjectionResultData != null) {
-                startScreenshotService(ScreenShot.mediaProjectionResultCode, ScreenShot.mediaProjectionResultData);
+                if (!isScreenshotServiceRunning(ScreenShot.class)) {
+                    startScreenshotService(ScreenShot.mediaProjectionResultCode, ScreenShot.mediaProjectionResultData);
+                }
             } else {
                 MediaProjectionManager projectionManager = (MediaProjectionManager) this.getSystemService(Context.MEDIA_PROJECTION_SERVICE);
                 Intent intent = projectionManager.createScreenCaptureIntent();
@@ -382,12 +392,66 @@ public class Aware_Light_Client extends Aware_Activity {
         }
     }
 
+    private void enableAccessibilityService() {
+        Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        Toast.makeText(this, "Please enable the accessibility service.", Toast.LENGTH_LONG).show();
+    }
+
+
+    private boolean isScreenshotServiceRunning(Class<?> serviceClass) {
+        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (serviceClass.getName().equals(service.service.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void startScreenshotService(int resultCode, Intent resultData) {
+        int defaultCaptureInterval = 5; // Default capture interval in seconds
+        int defaultCompressRate = 20;   // Default compression rate
+        boolean defaultSaveToLocal = true; // Default to not save to local storage
+
+        String captureIntervalSetting = Aware.getSetting(getApplicationContext(), Aware_Preferences.CAPTURE_TIME_INTERVAL);
+        String compressRateSetting = Aware.getSetting(getApplicationContext(), Aware_Preferences.COMPRESS_RATE);
+        String saveToLocalSetting = Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT_LOCAL_STORAGE);
+
+        int captureInterval = defaultCaptureInterval;
+        int compressRate = defaultCompressRate;
+        boolean saveToLocal = defaultSaveToLocal;
+
+        if (!captureIntervalSetting.isEmpty()) {
+            try {
+                captureInterval = Integer.parseInt(captureIntervalSetting);
+            } catch (NumberFormatException e) {
+                captureInterval = defaultCaptureInterval;
+            }
+        }
+
+        if (!compressRateSetting.isEmpty()) {
+            try {
+                compressRate = Integer.parseInt(compressRateSetting);
+            } catch (NumberFormatException e) {
+                compressRate = defaultCompressRate;
+            }
+        }
+
+        if (!saveToLocalSetting.isEmpty()) {
+            saveToLocal = Boolean.parseBoolean(saveToLocalSetting);
+        }
+
         Intent serviceIntent = new Intent(this, ScreenShot.class);
         serviceIntent.putExtra(ScreenShot.MEDIA_PROJECTION_RESULT_CODE, resultCode);
         serviceIntent.putExtra(ScreenShot.MEDIA_PROJECTION_RESULT_DATA, resultData);
+        serviceIntent.putExtra(ScreenShot.CAPTURE_TIME_INTERVAL, captureInterval * 1000); // Convert to milliseconds
+        serviceIntent.putExtra(ScreenShot.COMPRESS_RATE, compressRate);
+        serviceIntent.putExtra(ScreenShot.STATUS_SCREENSHOT_LOCAL_STORAGE, saveToLocal);
         ContextCompat.startForegroundService(this, serviceIntent);
     }
+
 
     private void stopScreenshotService() {
         Intent serviceIntent = new Intent(this, ScreenShot.class);
@@ -528,6 +592,7 @@ public class Aware_Light_Client extends Aware_Activity {
 //        }
 
         if (requestCode == REQUEST_CODE_SCREENSHOT) {
+
             if (resultCode == RESULT_OK) {
                 startScreenshotService(resultCode, data);
             } else {
@@ -535,6 +600,35 @@ public class Aware_Light_Client extends Aware_Activity {
             }
         }
     }
+
+    private boolean isAccessibilityServiceEnabled(Context context, Class<?> accessibilityServiceClass) {
+        int accessibilityEnabled = 0;
+        final String service = context.getPackageName() + "/" + accessibilityServiceClass.getCanonicalName();
+        try {
+            accessibilityEnabled = Settings.Secure.getInt(context.getApplicationContext().getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED);
+        } catch (Settings.SettingNotFoundException e) {
+            Log.e(TAG, "Error finding setting, default accessibility to not found: " + e.getMessage());
+        }
+
+        TextUtils.SimpleStringSplitter colonSplitter = new TextUtils.SimpleStringSplitter(':');
+
+        if (accessibilityEnabled == 1) {
+            String settingValue = Settings.Secure.getString(context.getApplicationContext().getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (settingValue != null) {
+                colonSplitter.setString(settingValue);
+                while (colonSplitter.hasNext()) {
+                    String componentName = colonSplitter.next();
+
+                    if (componentName.equalsIgnoreCase(service)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
 
 
     @Override
@@ -745,6 +839,7 @@ public class Aware_Light_Client extends Aware_Activity {
         Log.d("AWARE-Light_Client", "AWARE-Light interface cleaned from the list of frequently used apps");
         super.onDestroy();
         unregisterReceiver(packageMonitor);
+        unregisterReceiver(screenshotServiceStoppedReceiver);
     }
 
     private void hideUnusedPreferences() {
