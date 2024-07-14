@@ -19,6 +19,7 @@ import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
 import android.location.LocationManager;
+import android.media.projection.MediaProjectionManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -206,6 +207,7 @@ public class Aware extends Service {
     private static Intent keyboard = null;
     private static Intent scheduler = null;
     private static Intent significantSrv = null;
+    private static Intent screenshotSrv = null;
 
     private static AsyncStudyCheck studyCheck = null;
 
@@ -220,6 +222,8 @@ public class Aware extends Service {
     private static Account aware_account;
 
     public String AUTHORITY = "";
+
+    private static final int REQUEST_CODE_SCREENSHOT = 1002;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -2567,6 +2571,8 @@ public class Aware extends Service {
         if (Aware.getSetting(context, Aware_Preferences.STATUS_SCREENTEXT).equals("true")) {
             startScreenText(context);
         } else stopScreenText(context);
+
+
     }
 
     public static void startPlugins(Context context) {
@@ -3203,4 +3209,5 @@ public class Aware extends Service {
         if (context == null) return;
         if (mqttSrv != null) context.stopService(mqttSrv);
     }
+
 }

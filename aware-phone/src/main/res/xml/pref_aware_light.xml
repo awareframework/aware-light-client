@@ -765,6 +765,17 @@
                 android:summary="Every X seconds. Default 60 seconds (recommended)"
                 android:title="Wi-Fi scanning update frequency" />
         </PreferenceScreen>
+        <PreferenceScreen
+            android:icon="@drawable/ic_action_screenshot"
+            android:key="screenshot"
+            android:summary="screenshot capture"
+            android:title="Screenshot">
+            <CheckBoxPreference
+                android:defaultValue="false"
+                android:key="status_screenshot"
+                android:persistent="true"
+                android:title="Active" />
+        </PreferenceScreen>
     </PreferenceCategory>
 
     <PreferenceCategory

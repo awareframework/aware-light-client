@@ -256,15 +256,8 @@ public class Applications extends AccessibilityService {
 
                 // Check if the foreground app has changed
                 if (!currentForegroundApp.equals(previousForegroundApp)) {
+
 //                    // Log.d("Screen_Text", "==========App Switch============");
-                    if (!textBuffer.contains(hashedText)) {
-                        textBuffer.add(hashedText);
-                        contentBuffer.add(screenText);
-//                       // Log.d("Screen_Text", "Add ContentText: " + currScreenText);
-                    }
-
-
-                    // Log.d("Screen_Text", "Current ContentBuffer Size: " + contentBuffer.size());
 
                     for (ContentValues content: contentBuffer){
                         getContentResolver().insert(ScreenText_Provider.ScreenTextData.CONTENT_URI, content);
@@ -279,6 +272,12 @@ public class Applications extends AccessibilityService {
                     // Log.d("Screen_Text", "==========CLEAN BUFFER============");
                     // Update the previous foreground app
                     previousForegroundApp = currentForegroundApp;
+
+                    if (!textBuffer.contains(hashedText)) {
+                        textBuffer.add(hashedText);
+                        contentBuffer.add(screenText);
+//                       // Log.d("Screen_Text", "Add ContentText: " + currScreenText);
+                    }
 
                 } else {
                     // Add to content: get rid of the duplicate text

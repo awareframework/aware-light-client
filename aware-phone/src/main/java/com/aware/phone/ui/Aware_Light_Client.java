@@ -1,10 +1,10 @@
 package com.aware.phone.ui;
 
 import android.Manifest;
-import android.app.Activity;
 import android.app.Dialog;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -36,16 +36,13 @@ import android.util.Log;
 import android.view.ViewGroup;
 import android.widget.ListAdapter;
 import android.widget.Toast;
-import android.view.View;
-import android.widget.ListView;
-import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
 
 import com.aware.Applications;
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
 import com.aware.phone.R;
 import com.aware.ui.PermissionsHandler;
+import com.aware.ScreenShot;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -70,26 +67,12 @@ import static com.aware.Aware.setNotificationProperties;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-
-import android.Manifest;
-import android.content.Intent;
-import android.net.Uri;
-import android.os.Bundle;
 import android.os.Environment;
-import android.view.View;
-import android.widget.Button;
-import android.widget.Toast;
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
-import com.aware.phone.ui.prefs.ScreenshotCapturePref;
-import com.aware.phone.ui.Services.ScreenshotCaptureService;
+
 
 /**
  *
@@ -99,15 +82,20 @@ public class Aware_Light_Client extends Aware_Activity {
     public static boolean permissions_ok;
     private static Hashtable<Integer, Boolean> listSensorType;
     private static SharedPreferences prefs;
-
-    private static final int REQUEST_CODE = 100;
     public static final int REQUEST_CODE_OPEN_DIRECTORY = 1000;
-    public static final int REQUEST_CODE_STORAGE_PERMISSION = 1001;
+    public static final int REQUEST_CODE_SCREENSHOT = 1002;
     private static final ArrayList<String> REQUIRED_PERMISSIONS = new ArrayList<>();
     private static final Hashtable<String, Integer> optionalSensors = new Hashtable<>();
-    private MediaProjectionManager projectionManager;
-
     private final Aware.AndroidPackageMonitor packageMonitor = new Aware.AndroidPackageMonitor();
+
+    private BroadcastReceiver screenshotServiceStoppedReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (ScreenShot.ACTION_SCREENSHOT_SERVICE_STOPPED.equals(intent.getAction())) {
+                checkAndStartScreenshotService();
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -187,7 +175,12 @@ public class Aware_Light_Client extends Aware_Activity {
             startActivity(whitelisting);
         }
 
-        projectionManager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+        Log.d("AWARE::Screenshot","Print " + Aware.getSetting(getApplicationContext(),Aware_Preferences.STATUS_SCREENSHOT));
+
+        // Register the broadcast receiver
+        registerReceiver(screenshotServiceStoppedReceiver, new IntentFilter(ScreenShot.ACTION_SCREENSHOT_SERVICE_STOPPED));
+
+        checkAndStartScreenshotService();
     }
 
     @Override
@@ -244,6 +237,15 @@ public class Aware_Light_Client extends Aware_Activity {
         if (ListPreference.class.isInstance(pref)) {
             ListPreference list = (ListPreference) findPreference(key);
             list.setSummary(list.getEntry());
+        }
+
+        // Check if screenshot preference is changed
+        if (key.equals(Aware_Preferences.STATUS_SCREENSHOT)) {
+            if (value.equals("true")) {
+                checkAndStartScreenshotService();
+            } else {
+                stopScreenshotService();
+            }
         }
     }
 
@@ -368,6 +370,30 @@ public class Aware_Light_Client extends Aware_Activity {
         }
     }
 
+    private void checkAndStartScreenshotService() {
+        if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
+            if (ScreenShot.mediaProjectionResultCode != 0 && ScreenShot.mediaProjectionResultData != null) {
+                startScreenshotService(ScreenShot.mediaProjectionResultCode, ScreenShot.mediaProjectionResultData);
+            } else {
+                MediaProjectionManager projectionManager = (MediaProjectionManager) this.getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+                Intent intent = projectionManager.createScreenCaptureIntent();
+                startActivityForResult(intent, REQUEST_CODE_SCREENSHOT);
+            }
+        }
+    }
+
+    private void startScreenshotService(int resultCode, Intent resultData) {
+        Intent serviceIntent = new Intent(this, ScreenShot.class);
+        serviceIntent.putExtra(ScreenShot.MEDIA_PROJECTION_RESULT_CODE, resultCode);
+        serviceIntent.putExtra(ScreenShot.MEDIA_PROJECTION_RESULT_DATA, resultData);
+        ContextCompat.startForegroundService(this, serviceIntent);
+    }
+
+    private void stopScreenshotService() {
+        Intent serviceIntent = new Intent(this, ScreenShot.class);
+        stopService(serviceIntent);
+    }
+
     /**
      * Checks if the application is running on an emulator.
      *
@@ -490,15 +516,23 @@ public class Aware_Light_Client extends Aware_Activity {
             // Log.d("export_data", "Output folder URI: " + pickedDir.getUri().toString());
         }
 
-        if (requestCode == ScreenshotCapturePref.REQUEST_CODE_SCREENSHOT && resultCode == RESULT_OK) {
-            Log.d(TAG, "Starting ScreenCaptureService with result data");
-            Intent intent = new Intent(this, ScreenshotCaptureService.class);
-            intent.putExtra(ScreenshotCaptureService.MEDIA_PROJECTION_RESULT_CODE, resultCode);
-            intent.putExtra(ScreenshotCaptureService.MEDIA_PROJECTION_RESULT_DATA, data);
-            ContextCompat.startForegroundService(this, intent);
-        } else {
-            Toast.makeText(this, "Screen capture permission denied.", Toast.LENGTH_SHORT).show();
-            Log.d(TAG, "Screen capture permission denied");
+//        if (requestCode == ScreenshotCapturePref.REQUEST_CODE_SCREENSHOT && resultCode == RESULT_OK) {
+//            Log.d(TAG, "Starting ScreenCaptureService with result data");
+//            Intent intent = new Intent(this, ScreenshotCaptureService.class);
+//            intent.putExtra(ScreenshotCaptureService.MEDIA_PROJECTION_RESULT_CODE, resultCode);
+//            intent.putExtra(ScreenshotCaptureService.MEDIA_PROJECTION_RESULT_DATA, data);
+//            ContextCompat.startForegroundService(this, intent);
+//        } else {
+//            Toast.makeText(this, "Screen capture permission denied.", Toast.LENGTH_SHORT).show();
+//            Log.d(TAG, "Screen capture permission denied");
+//        }
+
+        if (requestCode == REQUEST_CODE_SCREENSHOT) {
+            if (resultCode == RESULT_OK) {
+                startScreenshotService(resultCode, data);
+            } else {
+                Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show();
+            }
         }
     }
 

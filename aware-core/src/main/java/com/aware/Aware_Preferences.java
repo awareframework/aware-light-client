@@ -447,6 +447,12 @@ public class Aware_Preferences {
      */
     public static final String PACKAGE_SPECIFICATION = "package_specification";
 
+    public static final String STATUS_SCREENSHOT = "status_screenshot";
+
+    public static final String CAPTURE_TIME_INTERVAL = "capture_time_interval";
+
+    public static final String COMPRESS_RATE = "compress_rate";
+
 
 
     /**
