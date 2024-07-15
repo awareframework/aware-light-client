@@ -3,6 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.aware.phone">
 
+    <queries>
+        <package android:name="com.aware.providers" />
+    </queries>
+
     <application
         tools:replace="android:networkSecurityConfig"
         android:icon="@drawable/ic_launcher_aware"

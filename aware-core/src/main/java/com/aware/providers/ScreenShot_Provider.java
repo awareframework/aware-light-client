@@ -1,6 +1,7 @@
 package com.aware.providers;
 
 import android.content.ContentProvider;
+import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
@@ -8,27 +9,37 @@ import android.content.UriMatcher;
 import android.database.Cursor;
 import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.aware.Aware;
+import com.aware.ScreenShot;
 import com.aware.utils.DatabaseHelper;
 
+import java.util.HashMap;
 import java.util.Objects;
 
 public class ScreenShot_Provider extends ContentProvider {
 
     private static final int DATABASE_VERSION = 1;
-    public static final String AUTHORITY = "com.aware.provider.screenshot";
+    public static String AUTHORITY = "com.aware.provider.screenshot";
     private static final int SCREENSHOT = 1;
+    private static final int SCREENSHOT_ID = 2;
+
 
     public static final class ScreenshotData {
         private ScreenshotData() {
         }
 
         public static final Uri CONTENT_URI = Uri.parse("content://" + AUTHORITY + "/screenshot");
+        public static final String CONTENT_ITEM_TYPE = ContentResolver.CURSOR_ITEM_BASE_TYPE +
+                "/vnd." + "aware.screenshot";
+        public static final String CONTENT_TYPE =   ContentResolver.CURSOR_DIR_BASE_TYPE +
+                "/vnd." + "aware.screenshot";
         public static final String _ID = "_id";
         public static final String TIMESTAMP = "timestamp";
         public static final String DEVICE_ID = "device_id";
@@ -47,7 +58,7 @@ public class ScreenShot_Provider extends ContentProvider {
     private UriMatcher sUriMatcher;
     private DatabaseHelper dbHelper;
     private static SQLiteDatabase database;
-
+    private HashMap<String, String>  screenshotDataMap = null;
     private void initialiseDatabase() {
         if (dbHelper == null)
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
@@ -60,9 +71,18 @@ public class ScreenShot_Provider extends ContentProvider {
     public boolean onCreate() {
         Log.d("ScreenShot_Provider", "onCreate called");
 
-        sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
-        sUriMatcher.addURI(AUTHORITY, "screenshot", SCREENSHOT);
+        AUTHORITY = getContext().getPackageName() + ".provider.screenshot";
 
+        sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
+        sUriMatcher.addURI(AUTHORITY, DATABASE_TABLES[0], SCREENSHOT);
+        sUriMatcher.addURI(AUTHORITY, DATABASE_TABLES[0] + "/#", SCREENSHOT_ID);
+        Log.d("ScreenShot_Provider", "UriMatcher setup complete");
+
+        screenshotDataMap = new HashMap<String,String>();
+        screenshotDataMap.put(ScreenshotData._ID, ScreenshotData._ID);
+        screenshotDataMap.put(ScreenshotData.TIMESTAMP, ScreenshotData.TIMESTAMP);
+        screenshotDataMap.put(ScreenshotData.DEVICE_ID, ScreenshotData.DEVICE_ID);
+        screenshotDataMap.put(ScreenshotData.IMAGE_DATA, ScreenshotData.IMAGE_DATA);
         Log.d("ScreenShot_Provider", "Provider setup complete");
         return true;
     }
@@ -80,42 +100,113 @@ public class ScreenShot_Provider extends ContentProvider {
         Log.d("ScreenShot_Provider", "Inserting screenshot with timestamp: " + timestamp + " and image size: " + imageSize + " bytes");
 
         database.beginTransaction();
-        try {
-            if (sUriMatcher.match(uri) == SCREENSHOT) {
-                long screenshot_id = database.insertWithOnConflict(DATABASE_TABLES[0], ScreenshotData.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                if (screenshot_id > 0) {
-                    Uri screenshotUri = ContentUris.withAppendedId(ScreenshotData.CONTENT_URI, screenshot_id);
-                    Objects.requireNonNull(getContext()).getContentResolver().notifyChange(screenshotUri, null, false);
+        switch (sUriMatcher.match(uri)){
+            case SCREENSHOT:
+                long screen_shot_id = database.insertWithOnConflict(DATABASE_TABLES[0],
+                        ScreenShot_Provider.ScreenshotData.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                if (screen_shot_id > 0) {
+                    Uri screenShotUri = ContentUris.withAppendedId(ScreenshotData.CONTENT_URI, screen_shot_id);
+                    Objects.requireNonNull(getContext()).getContentResolver().notifyChange(screenShotUri, null, false);
                     database.setTransactionSuccessful();
-                    Log.d("ScreenShot_Provider", "Insert successful, new row id: " + screenshot_id);
-                    return screenshotUri;
+                    database.endTransaction();
+                    Log.d("ScreenShot_Provider", "Insert successful, new row id: " + screen_shot_id);
+                    return screenShotUri;
                 }
+
+                database.endTransaction();
                 throw new SQLException("Failed to insert row into " + uri);
-            }
-            throw new IllegalArgumentException("Unknown URI " + uri);
-        } finally {
-            database.endTransaction();
+
+            default:
+                database.endTransaction();
+                throw new IllegalArgumentException("Unknown URI Insert " + uri);
         }
     }
 
     @Override
     public String getType(Uri uri) {
-        throw new UnsupportedOperationException("Not implemented");
+
+        switch (sUriMatcher.match(uri)){
+            case SCREENSHOT:
+                return ScreenshotData.CONTENT_TYPE;
+            case SCREENSHOT_ID:
+                return ScreenshotData.CONTENT_ITEM_TYPE;
+            default:
+                throw new IllegalArgumentException("WTF Unknown URI " + uri);
+        }
     }
 
-    @Nullable
     @Override
-    public Cursor query(@NonNull Uri uri, @Nullable String[] strings, @Nullable String s, @Nullable String[] strings1, @Nullable String s1) {
-        throw new UnsupportedOperationException("Not implemented");
+    public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
+        initialiseDatabase();
+
+        SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
+        qb.setStrict(true);
+        switch (sUriMatcher.match(uri)) {
+            case SCREENSHOT:
+                qb.setTables(DATABASE_TABLES[0]);
+                qb.setProjectionMap(screenshotDataMap);
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown URI query  " + uri);
+        }
+        try {
+            Cursor c = qb.query(database, projection, selection, selectionArgs,
+                    null, null, sortOrder);
+            c.setNotificationUri(getContext().getContentResolver(), uri);
+            return c;
+        } catch (IllegalStateException e) {
+            if (Aware.DEBUG)
+                Log.e(Aware.TAG, e.getMessage());
+            return null;
+        }
     }
 
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
-        throw new UnsupportedOperationException("Not implemented");
+        initialiseDatabase();
+
+        //lock database for transaction
+        database.beginTransaction();
+
+        int count;
+        switch (sUriMatcher.match(uri)) {
+            case SCREENSHOT:
+                count = database.delete(DATABASE_TABLES[0], selection,
+                        selectionArgs);
+                break;
+            default:
+                database.endTransaction();
+                throw new IllegalArgumentException("Unknown URI delete " + uri);
+        }
+
+        database.setTransactionSuccessful();
+        database.endTransaction();
+
+        getContext().getContentResolver().notifyChange(uri, null, false);
+        return count;
     }
 
     @Override
     public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
-        throw new UnsupportedOperationException("Not implemented");
+        initialiseDatabase();
+
+        database.beginTransaction();
+
+        int count;
+        switch (sUriMatcher.match(uri)) {
+            case SCREENSHOT:
+                count = database.update(DATABASE_TABLES[0], values, selection,
+                        selectionArgs);
+                break;
+            default:
+                database.endTransaction();
+                throw new IllegalArgumentException("Unknown URI update" + uri);
+        }
+
+        database.setTransactionSuccessful();
+        database.endTransaction();
+
+        getContext().getContentResolver().notifyChange(uri, null, false);
+        return count;
     }
 }

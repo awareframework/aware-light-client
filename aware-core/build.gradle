@@ -42,6 +42,7 @@ android {
         resValue "string", "provider_timezones", "com.aware.provider.timezone"
         resValue "string", "provider_traffic", "com.aware.provider.traffic"
         resValue "string", "provider_wifi", "com.aware.provider.wifi"
+        resValue "string", "provider_screenshot", "com.aware.provider.screenshot"
     }
 
     signingConfigs {

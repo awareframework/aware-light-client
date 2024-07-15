@@ -7,10 +7,12 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SyncRequest;
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
@@ -21,6 +23,7 @@ import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -32,6 +35,7 @@ import android.view.WindowManager;
 import androidx.core.app.NotificationCompat;
 
 import com.aware.providers.ScreenShot_Provider;
+import com.aware.providers.ScreenText_Provider;
 import com.aware.utils.Aware_Sensor;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -91,17 +95,43 @@ public class ScreenShot extends Aware_Sensor {
         }
     };
 
+    public static final ScreenshotBroadcaster screenshot_BR = new ScreenshotBroadcaster();
+
+    public static class ScreenshotBroadcaster extends BroadcastReceiver{
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+
+            if (intent.getAction().equals(Aware.ACTION_AWARE_SYNC_DATA)) {
+
+                Bundle sync = new Bundle();
+                sync.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
+                sync.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
+
+                ContentResolver.requestSync(Aware.getAWAREAccount(context), ScreenShot_Provider.AUTHORITY, sync);
+            }
+        }
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
 
-        AUTHORITY = ""; // Set this if needed
+        AUTHORITY = ScreenShot_Provider.AUTHORITY;
+
 
         REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         REQUIRED_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
 
         createNotificationChannel();
         registerScreenStateReceiver();
+        if (Aware.DEBUG) Log.d(TAG, "Screenshot service created!");
+
+        IntentFilter awareActions = new IntentFilter();
+        awareActions.addAction(Aware.ACTION_AWARE_SYNC_CONFIG);
+        awareActions.addAction(Aware.ACTION_AWARE_SYNC_DATA);
+        awareActions.addAction(Aware.ACTION_QUIT_STUDY);
+        registerReceiver(screenshot_BR, awareActions);
     }
 
     @Override
@@ -109,6 +139,25 @@ public class ScreenShot extends Aware_Sensor {
         if (intent != null && ACTION_STOP_CAPTURE.equals(intent.getAction())) {
             stopSelf();
             return START_NOT_STICKY;
+        }
+
+        if (PERMISSIONS_OK) {
+            DEBUG = Aware.getSetting(this, Aware_Preferences.DEBUG_FLAG).equals("true");
+
+            Aware.setSetting(this, Aware_Preferences.STATUS_SCREENSHOT, true);
+            if (Aware.DEBUG) Log.d(TAG, "Screenshot service active...");
+
+
+            if (Aware.isStudy(this)) {
+                ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), ScreenShot_Provider.AUTHORITY, 1);
+                ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), ScreenShot_Provider.AUTHORITY, true);
+                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                SyncRequest request = new SyncRequest.Builder()
+                        .syncPeriodic(frequency, frequency / 3)
+                        .setSyncAdapter(Aware.getAWAREAccount(this), ScreenShot_Provider.AUTHORITY)
+                        .setExtras(new Bundle()).build();
+                ContentResolver.requestSync(request);
+            }
         }
 
         int resultCode = intent.getIntExtra(MEDIA_PROJECTION_RESULT_CODE, Activity.RESULT_CANCELED);
@@ -329,6 +378,7 @@ public class ScreenShot extends Aware_Sensor {
         Log.d("ScreenShot", "Device ID: " + values.getAsString(ScreenShot_Provider.ScreenshotData.DEVICE_ID));
         Log.d("ScreenShot", "Image data size: " + imageData.length + " bytes");
         Log.d("ScreenShot", "URL: " + ScreenShot_Provider.ScreenshotData.CONTENT_URI);
+        Log.d("ScreenShot", "Screentext Content URI: " + ScreenText_Provider.ScreenTextData.CONTENT_URI);
 
         getContentResolver().insert(ScreenShot_Provider.ScreenshotData.CONTENT_URI, values);
     }
@@ -372,6 +422,15 @@ public class ScreenShot extends Aware_Sensor {
         super.onDestroy();
         unregisterReceiver(screenStateReceiver);
         cleanupResources();
+        ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), ScreenShot_Provider.AUTHORITY, false);
+        ContentResolver.removePeriodicSync(
+                Aware.getAWAREAccount(this),
+                ScreenShot_Provider.AUTHORITY,
+                Bundle.EMPTY
+        );
+
+        if (Aware.DEBUG) Log.d(TAG, "Screenshot service terminated...");
+        unregisterReceiver(screenshot_BR);
     }
 
     @Override
@@ -379,10 +438,16 @@ public class ScreenShot extends Aware_Sensor {
         return null;
     }
 
-    private void requestScreenshotPermission() {
-        MediaProjectionManager projectionManager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-        Intent permissionIntent = projectionManager.createScreenCaptureIntent();
-        permissionIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivity(permissionIntent);
+    @Override
+    public boolean onUnbind(Intent intent) {
+
+        if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
+            try {
+                if (screenshot_BR != null) unregisterReceiver(screenshot_BR);
+            } catch (IllegalArgumentException e) {
+                Log.d(TAG, "Screenshot service unbind...");
+            }
+        }
+        return super.onUnbind(intent);
     }
 }

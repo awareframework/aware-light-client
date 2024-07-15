@@ -23,6 +23,13 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <queries>
+        <package android:name="com.aware.providers" />
+        <package android:name="com.aware.ui" />
+        <package android:name="com.aware.utils" />
+        <package android:name="com.aware.syncadapters" />
+    </queries>
+
     <application
         android:networkSecurityConfig="@xml/aware_ssl_config">
 
@@ -430,12 +437,11 @@
             android:writePermission="com.aware.WRITE_CONTEXT_DATA" />
 
         <provider
-            android:name="com.aware.providers.ScreenShot_Provider"
+            android:name=".providers.ScreenShot_Provider"
             android:authorities="${applicationId}.provider.screenshot"
             android:exported="true"
             android:label="@string/sensor_screenshot"
             android:readPermission="com.aware.READ_CONTEXT_DATA"
-            android:enabled="true"
             android:syncable="true"
             android:writePermission="com.aware.WRITE_CONTEXT_DATA" />
 
