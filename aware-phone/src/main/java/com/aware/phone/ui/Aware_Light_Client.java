@@ -381,7 +381,7 @@ public class Aware_Light_Client extends Aware_Activity {
 
         if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
             if (ScreenShot.mediaProjectionResultCode != 0 && ScreenShot.mediaProjectionResultData != null) {
-                if (!isScreenshotServiceRunning(ScreenShot.class)) {
+                if (!isScreenshotServiceRunning()) {
                     startScreenshotService(ScreenShot.mediaProjectionResultCode, ScreenShot.mediaProjectionResultData);
                 }
             } else {
@@ -400,10 +400,10 @@ public class Aware_Light_Client extends Aware_Activity {
     }
 
 
-    private boolean isScreenshotServiceRunning(Class<?> serviceClass) {
+    private boolean isScreenshotServiceRunning() {
         ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
-            if (serviceClass.getName().equals(service.service.getClassName())) {
+            if (ScreenShot.class.getName().equals(service.service.getClassName())) {
                 return true;
             }
         }

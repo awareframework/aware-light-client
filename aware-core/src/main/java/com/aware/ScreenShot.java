@@ -21,19 +21,16 @@ import android.media.Image;
 import android.media.ImageReader;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.IBinder;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.WindowManager;
-
 import androidx.core.app.NotificationCompat;
-
 import com.aware.providers.ScreenShot_Provider;
 import com.aware.providers.ScreenText_Provider;
 import com.aware.utils.Aware_Sensor;
@@ -50,7 +47,7 @@ public class ScreenShot extends Aware_Sensor {
     public static final String CAPTURE_TIME_INTERVAL = "capture_time_interval";
     public static final String COMPRESS_RATE = "compress_rate";
     public static final String STATUS_SCREENSHOT_LOCAL_STORAGE = "status_screenshot_local_storage";
-    private static final String TAG = "ScreenShot";
+    private static String TAG;
     public static final String MEDIA_PROJECTION_RESULT_CODE = "MEDIA_PROJECTION_RESULT_CODE";
     public static final String MEDIA_PROJECTION_RESULT_DATA = "MEDIA_PROJECTION_RESULT_DATA";
     public static final String NOTIFICATION_CHANNEL_ID = "SCREEN_CAPTURE_CHANNEL";
@@ -90,34 +87,25 @@ public class ScreenShot extends Aware_Sensor {
                         isScreenOff = false;
                         startCapturing();
                         break;
+                    case Aware.ACTION_AWARE_SYNC_DATA:
+                        Log.d(TAG, "Received ACTION_AWARE_SYNC_DATA broadcast");
+                        Bundle sync = new Bundle();
+                        sync.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
+                        sync.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
+
+                        ContentResolver.requestSync(Aware.getAWAREAccount(context), ScreenShot_Provider.AUTHORITY, sync);
                 }
             }
         }
     };
 
-    public static final ScreenshotBroadcaster screenshot_BR = new ScreenshotBroadcaster();
-
-    public static class ScreenshotBroadcaster extends BroadcastReceiver{
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-
-            if (intent.getAction().equals(Aware.ACTION_AWARE_SYNC_DATA)) {
-
-                Bundle sync = new Bundle();
-                sync.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
-                sync.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
-
-                ContentResolver.requestSync(Aware.getAWAREAccount(context), ScreenShot_Provider.AUTHORITY, sync);
-            }
-        }
-    }
-
     @Override
     public void onCreate() {
         super.onCreate();
 
-        AUTHORITY = ScreenShot_Provider.AUTHORITY;
+        AUTHORITY = ScreenText_Provider.getAuthority(this);
+
+        TAG = "AWARE::Screenshot";
 
 
         REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
@@ -126,16 +114,12 @@ public class ScreenShot extends Aware_Sensor {
         createNotificationChannel();
         registerScreenStateReceiver();
         if (Aware.DEBUG) Log.d(TAG, "Screenshot service created!");
-
-        IntentFilter awareActions = new IntentFilter();
-        awareActions.addAction(Aware.ACTION_AWARE_SYNC_CONFIG);
-        awareActions.addAction(Aware.ACTION_AWARE_SYNC_DATA);
-        awareActions.addAction(Aware.ACTION_QUIT_STUDY);
-        registerReceiver(screenshot_BR, awareActions);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        super.onStartCommand(intent, flags, startId);
+
         if (intent != null && ACTION_STOP_CAPTURE.equals(intent.getAction())) {
             stopSelf();
             return START_NOT_STICKY;
@@ -148,13 +132,16 @@ public class ScreenShot extends Aware_Sensor {
             if (Aware.DEBUG) Log.d(TAG, "Screenshot service active...");
 
 
+
             if (Aware.isStudy(this)) {
-                ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), ScreenShot_Provider.AUTHORITY, 1);
-                ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), ScreenShot_Provider.AUTHORITY, true);
+                Log.d(TAG, "Aware is study, trying to enable screenshot sync...");
+                ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this), 1);
+                ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this), true);
                 long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), ScreenShot_Provider.AUTHORITY)
+                        .setSyncAdapter(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this))
                         .setExtras(new Bundle()).build();
                 ContentResolver.requestSync(request);
             }
@@ -171,10 +158,6 @@ public class ScreenShot extends Aware_Sensor {
         capture_delay = intent.getIntExtra(CAPTURE_TIME_INTERVAL, capture_delay);
         compressionRate = intent.getIntExtra(COMPRESS_RATE, compressionRate);
         saveToLocalStorage = intent.getBooleanExtra(STATUS_SCREENSHOT_LOCAL_STORAGE, saveToLocalStorage);
-
-        Log.d("ScreenShot", "Capture delay: " + capture_delay + "ms");
-        Log.d("ScreenShot", "Compression rate: " + compressionRate + "%");
-        Log.d("ScreenShot", "Save to local storage: " + saveToLocalStorage);
 
         if (mediaProjectionResultCode != 0 && mediaProjectionResultData != null) {
             startForegroundService(mediaProjectionResultCode, mediaProjectionResultData);
@@ -205,6 +188,9 @@ public class ScreenShot extends Aware_Sensor {
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         filter.addAction(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Aware.ACTION_AWARE_SYNC_DATA);
+        filter.addAction(Aware.ACTION_AWARE_SYNC_CONFIG);
+        filter.addAction(Aware.ACTION_QUIT_STUDY);
         registerReceiver(screenStateReceiver, filter);
     }
 
@@ -270,13 +256,13 @@ public class ScreenShot extends Aware_Sensor {
         @Override
         public void run() {
             if (!isScreenOff) {
-                long currentTime = System.currentTimeMillis();
+                long currentTime = SystemClock.elapsedRealtime();
                 if (currentTime - lastCaptureTime >= capture_delay || retryCount > 0) {
                     Image image = imageReader.acquireLatestImage();
                     if (image != null) {
                         retryCount = 0;
                         lastCaptureTime = currentTime;
-                        processImage(image);
+                        processImage(image, currentTime);
                         image.close();
                         handler.postDelayed(this, capture_delay);
                     } else {
@@ -287,7 +273,7 @@ public class ScreenShot extends Aware_Sensor {
                         handler.postDelayed(this, retryDelay);
                     }
                 } else {
-                    handler.postDelayed(this, 100);
+                    handler.postDelayed(this, capture_delay - (currentTime - lastCaptureTime));
                 }
             }
         }
@@ -308,15 +294,15 @@ public class ScreenShot extends Aware_Sensor {
      *
      * @param bitmap The bitmap to save.
      */
-    private void saveBitmap(Bitmap bitmap) {
+    private void saveBitmap(Bitmap bitmap, long timestamp) {
         File downloadsDirectory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "aware-light/screenshot");
         if (!downloadsDirectory.exists() && !downloadsDirectory.mkdirs()) {
             Log.e(TAG, "Failed to create directory: " + downloadsDirectory.getAbsolutePath());
             return;
         }
 
-        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
-        File path = new File(downloadsDirectory, "screenshot_" + timestamp + ".jpg");
+        String formattedTimestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date(timestamp));
+        File path = new File(downloadsDirectory, "screenshot_" + formattedTimestamp + ".jpg");
         try (FileOutputStream fos = new FileOutputStream(path)) {
             bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, fos); // Use the selected compression rate
             fos.flush();
@@ -339,7 +325,7 @@ public class ScreenShot extends Aware_Sensor {
      *
      * @param image The captured image.
      */
-    private void processImage(Image image) {
+    private void processImage(Image image,long timestamp) {
         try {
             Image.Plane[] planes = image.getPlanes();
             ByteBuffer buffer = planes[0].getBuffer();
@@ -350,12 +336,11 @@ public class ScreenShot extends Aware_Sensor {
             Bitmap bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
             bitmap.copyPixelsFromBuffer(buffer);
 
-            Log.d("Sceenshot", "Save screenshot to local storage: " + saveToLocalStorage);
             if (saveToLocalStorage){
-                saveBitmap(bitmap);
+                saveBitmap(bitmap,timestamp);
             } else {
                 byte[] imageData = convertBitmapToByteArray(bitmap);
-                storeScreenshotMetadata(imageData);
+                storeScreenshotMetadata(imageData, timestamp);
             }
         } catch (Exception e) {
             Log.e(TAG, "Error processing image", e);
@@ -368,29 +353,23 @@ public class ScreenShot extends Aware_Sensor {
         return stream.toByteArray();
     }
 
-    private void storeScreenshotMetadata(byte[] imageData) {
+    private void storeScreenshotMetadata(byte[] imageData, long timestamp) {
         ContentValues values = new ContentValues();
-        values.put(ScreenShot_Provider.ScreenshotData.TIMESTAMP, System.currentTimeMillis());
+        values.put(ScreenShot_Provider.ScreenshotData.TIMESTAMP, timestamp);
         values.put(ScreenShot_Provider.ScreenshotData.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
         values.put(ScreenShot_Provider.ScreenshotData.IMAGE_DATA, imageData);
-
-        Log.d("ScreenShot", "Timestamp: " + values.getAsLong(ScreenShot_Provider.ScreenshotData.TIMESTAMP));
-        Log.d("ScreenShot", "Device ID: " + values.getAsString(ScreenShot_Provider.ScreenshotData.DEVICE_ID));
-        Log.d("ScreenShot", "Image data size: " + imageData.length + " bytes");
-        Log.d("ScreenShot", "URL: " + ScreenShot_Provider.ScreenshotData.CONTENT_URI);
-        Log.d("ScreenShot", "Screentext Content URI: " + ScreenText_Provider.ScreenTextData.CONTENT_URI);
 
         getContentResolver().insert(ScreenShot_Provider.ScreenshotData.CONTENT_URI, values);
     }
 
     private void stopCapturing() {
-        if (handler != null && captureRunnable != null) {
+        if (handler != null) {
             handler.removeCallbacks(captureRunnable);
         }
     }
 
     private void startCapturing() {
-        if (handler != null && captureRunnable != null) {
+        if (handler != null) {
             handler.post(captureRunnable);
         }
     }
@@ -422,20 +401,14 @@ public class ScreenShot extends Aware_Sensor {
         super.onDestroy();
         unregisterReceiver(screenStateReceiver);
         cleanupResources();
-        ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), ScreenShot_Provider.AUTHORITY, false);
+        ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(
                 Aware.getAWAREAccount(this),
-                ScreenShot_Provider.AUTHORITY,
+                ScreenShot_Provider.getAuthority(this),
                 Bundle.EMPTY
         );
 
         if (Aware.DEBUG) Log.d(TAG, "Screenshot service terminated...");
-        unregisterReceiver(screenshot_BR);
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
     }
 
     @Override
@@ -443,7 +416,7 @@ public class ScreenShot extends Aware_Sensor {
 
         if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
             try {
-                if (screenshot_BR != null) unregisterReceiver(screenshot_BR);
+                if (screenStateReceiver != null) unregisterReceiver(screenStateReceiver);
             } catch (IllegalArgumentException e) {
                 Log.d(TAG, "Screenshot service unbind...");
             }

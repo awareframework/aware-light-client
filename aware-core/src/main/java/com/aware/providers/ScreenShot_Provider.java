@@ -11,6 +11,7 @@ import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
+import android.provider.BaseColumns;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -31,7 +32,7 @@ public class ScreenShot_Provider extends ContentProvider {
     private static final int SCREENSHOT_ID = 2;
 
 
-    public static final class ScreenshotData {
+    public static final class ScreenshotData implements BaseColumns {
         private ScreenshotData() {
         }
 
@@ -65,6 +66,11 @@ public class ScreenShot_Provider extends ContentProvider {
         if (database == null)
             database = dbHelper.getWritableDatabase();
         Log.d("ScreenShot_Provider", "Database initialized");
+    }
+
+    public static String getAuthority(Context context) {
+        AUTHORITY = context.getPackageName() + ".provider.screenshot";
+        return AUTHORITY;
     }
 
     @Override

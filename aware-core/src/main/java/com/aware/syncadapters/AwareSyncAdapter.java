@@ -72,7 +72,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
         highFrequencySensors.add("temperature");
         highFrequencySensors.add("proximity");
         highFrequencySensors.add("screentext");
-
+        highFrequencySensors.add("screenshot");
         dontClearSensors.add("aware_studies");
     }
 
