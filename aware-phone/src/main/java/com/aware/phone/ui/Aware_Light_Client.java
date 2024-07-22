@@ -23,6 +23,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.PowerManager;
 import android.preference.CheckBoxPreference;
 import android.preference.EditTextPreference;
@@ -182,7 +183,7 @@ public class Aware_Light_Client extends Aware_Activity {
 
         // Register the broadcast receiver
         registerReceiver(screenshotServiceStoppedReceiver, new IntentFilter(ScreenShot.ACTION_SCREENSHOT_SERVICE_STOPPED));
-
+        registerReceiver(screenshotStatusReceiver, new IntentFilter(ScreenShot.ACTION_SCREENSHOT_STATUS));
         checkAndStartScreenshotService();
     }
 
@@ -371,6 +372,30 @@ public class Aware_Light_Client extends Aware_Activity {
                 }
             }
         }
+    }
+
+    private BroadcastReceiver screenshotStatusReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (ScreenShot.ACTION_SCREENSHOT_STATUS.equals(intent.getAction())) {
+                String status = intent.getStringExtra(ScreenShot.EXTRA_SCREENSHOT_STATUS);
+                if (ScreenShot.STATUS_RETRY_COUNT_EXCEEDED.equals(status)) {
+                    Log.d(TAG, "Screenshot service retry count exceeded. Restarting service...");
+                    restartScreenshotService();
+                }
+            }
+        }
+    };
+
+    private void restartScreenshotService() {
+        stopScreenshotService();
+        // Optionally wait for a few seconds before restarting the service to avoid rapid restarts
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                checkAndStartScreenshotService();
+            }
+        }, 2000); // Wait for 2 seconds before restarting
     }
 
     private void checkAndStartScreenshotService() {
@@ -838,6 +863,7 @@ public class Aware_Light_Client extends Aware_Activity {
         }
         Log.d("AWARE-Light_Client", "AWARE-Light interface cleaned from the list of frequently used apps");
         super.onDestroy();
+        unregisterReceiver(screenshotStatusReceiver);
         unregisterReceiver(packageMonitor);
         unregisterReceiver(screenshotServiceStoppedReceiver);
     }

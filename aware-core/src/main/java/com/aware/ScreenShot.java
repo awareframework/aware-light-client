@@ -57,6 +57,10 @@ public class ScreenShot extends Aware_Sensor {
     public static final int NOTIFICATION_ID = 1;
     public static final String ACTION_STOP_CAPTURE = "com.aware.ACTION_STOP_CAPTURE";
     public static final String ACTION_SCREENSHOT_SERVICE_STOPPED = "com.aware.ACTION_SCREENSHOT_SERVICE_STOPPED";
+    public static final String ACTION_SCREENSHOT_STATUS = "com.aware.ACTION_SCREENSHOT_STATUS";
+    public static final String EXTRA_SCREENSHOT_STATUS = "extra_screenshot_status";
+    public static final String STATUS_RETRY_COUNT_EXCEEDED = "status_retry_count_exceeded";
+
     public static int mediaProjectionResultCode;
     public static Intent mediaProjectionResultData;
 
@@ -266,6 +270,7 @@ public class ScreenShot extends Aware_Sensor {
 
 
     private final Runnable captureRunnable = new Runnable() {
+        private static final int MAX_RETRY_COUNT = 5;
         private int retryCount = 0;
         @Override
         public void run() {
@@ -276,22 +281,32 @@ public class ScreenShot extends Aware_Sensor {
                     if (image != null) {
                         retryCount = 0;
                         lastCaptureTime = currentTime;
-                        processImage(image);
+                        processImage(image, currentTime);
                         image.close();
                         handler.postDelayed(this, capture_delay);
                     } else {
                         Log.e(TAG, "Failed to capture image: image is null");
                         resetImageReader();
                         retryCount++;
+                        if (retryCount > MAX_RETRY_COUNT) {
+                            sendRetryExceededBroadcast();
+                            return;
+                        }
                         int retryDelay = Math.min(capture_delay, retryCount * 100);
                         handler.postDelayed(this, retryDelay);
                     }
                 } else {
-                    handler.postDelayed(this, 100);
+                    handler.postDelayed(this, capture_delay - (currentTime - lastCaptureTime));
                 }
             }
         }
     };
+
+    private void sendRetryExceededBroadcast() {
+        Intent intent = new Intent(ACTION_SCREENSHOT_STATUS);
+        intent.putExtra(EXTRA_SCREENSHOT_STATUS, STATUS_RETRY_COUNT_EXCEEDED);
+        sendBroadcast(intent);
+    }
 
     private void resetImageReader() {
         Log.d(TAG, "Resetting ImageReader");
@@ -308,15 +323,18 @@ public class ScreenShot extends Aware_Sensor {
      *
      * @param bitmap The bitmap to save.
      */
-    private void saveBitmap(Bitmap bitmap) {
+    private void saveBitmap(Bitmap bitmap, long timestamp) {
         File downloadsDirectory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "aware-light/screenshot");
         if (!downloadsDirectory.exists() && !downloadsDirectory.mkdirs()) {
             Log.e(TAG, "Failed to create directory: " + downloadsDirectory.getAbsolutePath());
             return;
         }
 
-        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
-        File path = new File(downloadsDirectory, "screenshot_" + timestamp + ".jpg");
+        Log.d("Screenshot", "timestamp " + timestamp);
+
+        String formattedTimestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(timestamp);
+        Log.d("Screenshot", "formatted timestamp is " + formattedTimestamp);
+        File path = new File(downloadsDirectory, "screenshot_" + formattedTimestamp + ".jpg");
         try (FileOutputStream fos = new FileOutputStream(path)) {
             bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, fos); // Use the selected compression rate
             fos.flush();
@@ -339,7 +357,7 @@ public class ScreenShot extends Aware_Sensor {
      *
      * @param image The captured image.
      */
-    private void processImage(Image image) {
+    private void processImage(Image image, long timestamp) {
         try {
             Image.Plane[] planes = image.getPlanes();
             ByteBuffer buffer = planes[0].getBuffer();
@@ -352,10 +370,10 @@ public class ScreenShot extends Aware_Sensor {
 
             Log.d("Sceenshot", "Save screenshot to local storage: " + saveToLocalStorage);
             if (saveToLocalStorage){
-                saveBitmap(bitmap);
+                saveBitmap(bitmap, timestamp);
             } else {
                 byte[] imageData = convertBitmapToByteArray(bitmap);
-                storeScreenshotMetadata(imageData);
+                storeScreenshotMetadata(imageData, timestamp);
             }
         } catch (Exception e) {
             Log.e(TAG, "Error processing image", e);
@@ -368,9 +386,9 @@ public class ScreenShot extends Aware_Sensor {
         return stream.toByteArray();
     }
 
-    private void storeScreenshotMetadata(byte[] imageData) {
+    private void storeScreenshotMetadata(byte[] imageData, long timestamp) {
         ContentValues values = new ContentValues();
-        values.put(ScreenShot_Provider.ScreenshotData.TIMESTAMP, System.currentTimeMillis());
+        values.put(ScreenShot_Provider.ScreenshotData.TIMESTAMP, timestamp);
         values.put(ScreenShot_Provider.ScreenshotData.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
         values.put(ScreenShot_Provider.ScreenshotData.IMAGE_DATA, imageData);
 
