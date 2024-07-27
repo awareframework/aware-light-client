@@ -13,6 +13,7 @@ import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.format.DateUtils;
+import android.util.Base64;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import com.aware.Applications;
@@ -92,8 +93,12 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
         if (!Aware.getSetting(mContext, Aware_Preferences.WEBSERVICE_SILENT).equals("true"))
             notManager = (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE);
 
+
+
         if (DATABASE_TABLES != null && TABLES_FIELDS != null && CONTEXT_URIS != null) {
             for (int i = 0; i < DATABASE_TABLES.length; i++) {
+
+
 
                 offloadData(mContext, DATABASE_TABLES[i], Aware.getSetting(getContext(), Aware_Preferences.WEBSERVICE_SERVER), TABLES_FIELDS[i], CONTEXT_URIS[i]);
             }
@@ -227,7 +232,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
                     return;
                 }
 
-//                Log.d(Aware.TAG, "Table: " + database_table + " exists: " + (response != null && response.length() == 0));
+                Log.d(Aware.TAG, "Table: " + database_table + " exists");
                 Log.d(Aware.TAG, "Last synced record in this table: " + latest);
                 Log.d(Aware.TAG, "Joined study since: " + study_condition);
                 Log.d(Aware.TAG, "Rows remaining to sync: " + total_records);
@@ -442,11 +447,13 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
         if (latest == null) return 0;
 
         JSONArray remoteData = new JSONArray(latest);
+        Log.d(Aware.TAG, "Remote Data: " + remoteData.toString());
 
         int TOTAL_RECORDS = 0;
         if (remoteData.length() == 0) {
             if (exists(columnsStr, "double_end_timestamp")) {
                 Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "double_end_timestamp != 0" + study_condition, null, "_id ASC");
+                Log.d(Aware.TAG, "Query: double_end_timestamp != 0" + study_condition);
                 if (counter != null && counter.moveToFirst()) {
                     TOTAL_RECORDS = counter.getCount();
                     counter.close();
@@ -454,6 +461,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
                 if (counter != null && !counter.isClosed()) counter.close();
             } else if (exists(columnsStr, "double_esm_user_answer_timestamp")) {
                 Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "double_esm_user_answer_timestamp != 0" + study_condition, null, "_id ASC");
+                Log.d(Aware.TAG, "Query: double_esm_user_answer_timestamp != 0" + study_condition);
                 if (counter != null && counter.moveToFirst()) {
                     TOTAL_RECORDS = counter.getCount();
                     counter.close();
@@ -461,12 +469,12 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
                 if (counter != null && !counter.isClosed()) counter.close();
             } else {
                 Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "1" + study_condition, null, "_id ASC");
+                Log.d(Aware.TAG, "Query: 1" + study_condition);
                 if (counter != null && counter.moveToFirst()) {
                     TOTAL_RECORDS = counter.getCount();
                     counter.close();
                 }
                 if (counter != null && !counter.isClosed()) counter.close();
-
             }
         } else {
             long last;
@@ -474,6 +482,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
                 if (remoteData.getJSONObject(0).has("double_end_timestamp")) {
                     last = remoteData.getJSONObject(0).getLong("double_end_timestamp");
                     Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "timestamp > " + last + " AND double_end_timestamp != 0" + study_condition, null, "_id ASC");
+                    Log.d(Aware.TAG, "Query: timestamp > " + last + " AND double_end_timestamp != 0" + study_condition);
                     if (counter != null && counter.moveToFirst()) {
                         TOTAL_RECORDS = counter.getCount();
                         counter.close();
@@ -484,6 +493,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
                 if (remoteData.getJSONObject(0).has("double_esm_user_answer_timestamp")) {
                     last = remoteData.getJSONObject(0).getLong("double_esm_user_answer_timestamp");
                     Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "timestamp > " + last + " AND double_esm_user_answer_timestamp != 0" + study_condition, null, "_id ASC");
+                    Log.d(Aware.TAG, "Query: timestamp > " + last + " AND double_esm_user_answer_timestamp != 0" + study_condition);
                     if (counter != null && counter.moveToFirst()) {
                         TOTAL_RECORDS = counter.getCount();
                         counter.close();
@@ -494,6 +504,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
                 if (remoteData.getJSONObject(0).has("timestamp")) {
                     last = remoteData.getJSONObject(0).getLong("timestamp");
                     Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "timestamp > " + last + study_condition, null, "_id ASC");
+                    Log.d(Aware.TAG, "Query: timestamp > " + last + study_condition);
                     if (counter != null && counter.moveToFirst()) {
                         TOTAL_RECORDS = counter.getCount();
                         counter.close();
@@ -504,6 +515,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
         }
         return TOTAL_RECORDS;
     }
+
 
     private Cursor getSyncData(JSONArray remoteData, Uri CONTENT_URI, String study_condition, String[] columnsStr, int uploaded_records, Context mContext, int MAX_POST_SIZE) throws JSONException {
         Cursor context_data = null;
@@ -589,20 +601,22 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
                 JSONObject row = new JSONObject();
                 String[] columns = context_data.getColumnNames();
                 for (String c_name : columns) {
-                    if (c_name.equals("_id")) continue; //Skip local database ID
+                    if (c_name.equals("_id")) continue; // Skip local database ID
                     if (c_name.equals("timestamp") || c_name.contains("double")) {
                         row.put(c_name, context_data.getDouble(context_data.getColumnIndex(c_name)));
                     } else if (c_name.contains("float")) {
                         row.put(c_name, context_data.getFloat(context_data.getColumnIndex(c_name)));
                     } else if (c_name.contains("long")) {
                         row.put(c_name, context_data.getLong(context_data.getColumnIndex(c_name)));
-                    } else if (c_name.contains("blob")) {
-                        row.put(c_name, context_data.getBlob(context_data.getColumnIndex(c_name)));
+                    } else if (c_name.contains("blob") || c_name.contains("image_data")) {
+                        byte[] blob = context_data.getBlob(context_data.getColumnIndex(c_name));
+                        Log.d(Aware.TAG, "BLOB data length: " + blob.length);
+                        row.put(c_name, Base64.encodeToString(blob, Base64.DEFAULT));
                     } else if (c_name.contains("integer")) {
                         row.put(c_name, context_data.getInt(context_data.getColumnIndex(c_name)));
                     } else {
                         String str = "";
-                        if (!context_data.isNull(context_data.getColumnIndex(c_name))) { //fixes nulls and batch inserts not being possible
+                        if (!context_data.isNull(context_data.getColumnIndex(c_name))) { // Fixes nulls and batch inserts not being possible
                             str = context_data.getString(context_data.getColumnIndex(c_name));
                         }
                         row.put(c_name, str);
@@ -611,34 +625,30 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
                 rows.put(row);
             } while (context_data.moveToNext());
 
-            context_data.close(); //clear phone's memory immediately
+            context_data.close(); // Clear phone's memory immediately
 
-            lastSynced = rows.getJSONObject(rows.length() - 1).getLong("timestamp"); //last record to be synced
+            lastSynced = rows.getJSONObject(rows.length() - 1).getLong("timestamp"); // Last record to be synced
             // For some tables, we must not clear everything.  Leave one row of these tables.
             if (dontClearSensors.contains(DATABASE_TABLE)) {
                 if (rows.length() >= 2) {
-                    lastSynced = rows.getJSONObject(rows.length() - 2).getLong("timestamp"); //last record to be synced
+                    lastSynced = rows.getJSONObject(rows.length() - 2).getLong("timestamp"); // Last record to be synced
                 } else {
                     lastSynced = 0;
                 }
             }
 
-            Hashtable<String, String> request = new Hashtable<>();
-            request.put(Aware_Preferences.DEVICE_ID, DEVICE_ID);
-            request.put("data", rows.toString());
-
             boolean dataInserted = Jdbc.insertData(mContext, DATABASE_TABLE, rows);
 
-            //Something went wrong, e.g., server is down, lost internet, etc.
+            // Something went wrong, e.g., server is down, lost internet, etc.
             if (!dataInserted) {
                 if (DEBUG) Log.d(Aware.TAG, DATABASE_TABLE + " FAILED to sync. Server down?");
                 return null;
             } else {
                 try {
                     Aware.debug(mContext, new JSONObject()
-                                    .put("table", DATABASE_TABLE)
-                                    .put("last_sync_timestamp", lastSynced)
-                                    .toString());
+                            .put("table", DATABASE_TABLE)
+                            .put("last_sync_timestamp", lastSynced)
+                            .toString());
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
@@ -650,6 +660,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
 
         return lastSynced;
     }
+
 
     private boolean isTableAllowedForMaintenance(String table_name) {
         //we always keep locally the information of the study and defined schedulers.

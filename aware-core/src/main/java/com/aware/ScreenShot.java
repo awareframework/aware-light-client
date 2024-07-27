@@ -144,7 +144,6 @@ public class ScreenShot extends Aware_Sensor {
                 long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
-                        .setSyncAdapter(Aware.getAWAREAccount(this), ScreenShot_Provider.AUTHORITY)
                         .setSyncAdapter(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this))
                         .setExtras(new Bundle()).build();
                 ContentResolver.requestSync(request);
@@ -261,7 +260,7 @@ public class ScreenShot extends Aware_Sensor {
         @Override
         public void run() {
             if (!isScreenOff) {
-                long currentTime = SystemClock.elapsedRealtime();
+                long currentTime = System.currentTimeMillis();
                 if (currentTime - lastCaptureTime >= capture_delay || retryCount > 0) {
                     Image image = imageReader.acquireLatestImage();
                     if (image != null) {

@@ -4,6 +4,7 @@ import android.app.Service;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.IBinder;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -20,11 +21,12 @@ public class ScreenShot_Sync extends Service {
             if (sSyncAdapter == null) {
                 sSyncAdapter = new AwareSyncAdapter(getApplicationContext(), true, true);
 
+
                 sSyncAdapter.init(
                         ScreenShot_Provider.DATABASE_TABLES,
                         ScreenShot_Provider.TABLES_FIELDS,
                         new Uri[]{
-                                ScreenShot_Provider.ScreenshotData.CONTENT_URI,
+                                ScreenShot_Provider.ScreenshotData.CONTENT_URI
                         });
             }
         }
