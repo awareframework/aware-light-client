@@ -92,11 +92,9 @@ public class ScreenShot extends Aware_Sensor {
                         startCapturing();
                         break;
                     case Aware.ACTION_AWARE_SYNC_DATA:
-                        Log.d(TAG, "Received ACTION_AWARE_SYNC_DATA broadcast");
                         Bundle sync = new Bundle();
                         sync.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
                         sync.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
-
                         ContentResolver.requestSync(Aware.getAWAREAccount(context), ScreenShot_Provider.AUTHORITY, sync);
                 }
             }
@@ -117,7 +115,6 @@ public class ScreenShot extends Aware_Sensor {
 
         createNotificationChannel();
         registerScreenStateReceiver();
-        if (Aware.DEBUG) Log.d(TAG, "Screenshot service created!");
     }
 
     @Override
@@ -133,12 +130,8 @@ public class ScreenShot extends Aware_Sensor {
             DEBUG = Aware.getSetting(this, Aware_Preferences.DEBUG_FLAG).equals("true");
 
             Aware.setSetting(this, Aware_Preferences.STATUS_SCREENSHOT, true);
-            if (Aware.DEBUG) Log.d(TAG, "Screenshot service active...");
-
-
 
             if (Aware.isStudy(this)) {
-                Log.d(TAG, "Aware is study, trying to enable screenshot sync...");
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this), true);
                 long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
@@ -171,6 +164,9 @@ public class ScreenShot extends Aware_Sensor {
         return START_STICKY;
     }
 
+    /**
+     * Creates a notification channel for Android Oreo and above.
+     */
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
@@ -187,6 +183,9 @@ public class ScreenShot extends Aware_Sensor {
         }
     }
 
+    /**
+     * Registers a broadcast receiver to listen for screen on/off events and data sync actions.
+     */
     private void registerScreenStateReceiver() {
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_SCREEN_OFF);
@@ -197,6 +196,12 @@ public class ScreenShot extends Aware_Sensor {
         registerReceiver(screenStateReceiver, filter);
     }
 
+    /**
+     * Starts the foreground service for capturing the screen.
+     *
+     * @param resultCode The result code from the media projection permission request.
+     * @param data The intent data from the media projection permission request.
+     */
     private void startForegroundService(int resultCode, Intent data) {
         Intent stopSelf = new Intent(this, ScreenShot.class);
         stopSelf.setAction(ACTION_STOP_CAPTURE);
@@ -229,7 +234,6 @@ public class ScreenShot extends Aware_Sensor {
         mediaProjection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
-                Log.d(TAG, "MediaProjection stopped");
                 cleanupResources();
                 stopSelf();
             }
@@ -254,6 +258,9 @@ public class ScreenShot extends Aware_Sensor {
     }
 
 
+    /**
+     * Runnable task that captures the screen at regular intervals.
+     */
     private final Runnable captureRunnable = new Runnable() {
         private static final int MAX_RETRY_COUNT = 5;
         private int retryCount = 0;
@@ -270,7 +277,6 @@ public class ScreenShot extends Aware_Sensor {
                         image.close();
                         handler.postDelayed(this, capture_delay);
                     } else {
-                        Log.e(TAG, "Failed to capture image: image is null");
                         resetImageReader();
                         retryCount++;
                         if (retryCount > MAX_RETRY_COUNT) {
@@ -287,60 +293,30 @@ public class ScreenShot extends Aware_Sensor {
         }
     };
 
+    /**
+     * Sends a broadcast indicating that the retry count for capturing the screen has been exceeded.
+     */
     private void sendRetryExceededBroadcast() {
         Intent intent = new Intent(ACTION_SCREENSHOT_STATUS);
         intent.putExtra(EXTRA_SCREENSHOT_STATUS, STATUS_RETRY_COUNT_EXCEEDED);
         sendBroadcast(intent);
     }
 
+    /**
+     * Resets the image reader to ensure it can capture new images.
+     */
     private void resetImageReader() {
-        Log.d(TAG, "Resetting ImageReader");
         imageReader.setOnImageAvailableListener(null, null);
         imageReader.close();
         imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
         virtualDisplay.setSurface(imageReader.getSurface());
     }
 
-
-
     /**
-     * Saves the bitmap to a file in the Downloads directory.
-     *
-     * @param bitmap The bitmap to save.
-     */
-    private void saveBitmap(Bitmap bitmap, long timestamp) {
-        File downloadsDirectory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "aware-light/screenshot");
-        if (!downloadsDirectory.exists() && !downloadsDirectory.mkdirs()) {
-            Log.e(TAG, "Failed to create directory: " + downloadsDirectory.getAbsolutePath());
-            return;
-        }
-
-        Log.d("Screenshot", "timestamp " + timestamp);
-
-        String formattedTimestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(timestamp);
-        Log.d("Screenshot", "formatted timestamp is " + formattedTimestamp);
-        File path = new File(downloadsDirectory, "screenshot_" + formattedTimestamp + ".jpg");
-        try (FileOutputStream fos = new FileOutputStream(path)) {
-            bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, fos); // Use the selected compression rate
-            fos.flush();
-            Log.d(TAG, "Screenshot saved to " + path.getAbsolutePath());
-        } catch (IOException e) {
-            Log.e(TAG, "Error saving screenshot", e);
-        }
-
-        long fileSizeInBytes = path.length();
-        long fileSizeInKB = fileSizeInBytes / 1024;
-        long fileSizeInMB = fileSizeInKB / 1024;
-
-        Log.d(TAG, "File size: " + fileSizeInBytes + " bytes");
-        Log.d(TAG, "File size: " + fileSizeInKB + " KB");
-        Log.d(TAG, "File size: " + fileSizeInMB + " MB");
-    }
-
-    /**
-     * Processes the captured image and saves it to a file.
+     * Processes the captured image and saves it to a file or stores its metadata in the database.
      *
      * @param image The captured image.
+     * @param timestamp The timestamp for the captured image.
      */
     private void processImage(Image image, long timestamp) {
         try {
@@ -364,12 +340,53 @@ public class ScreenShot extends Aware_Sensor {
         }
     }
 
+    /**
+     * Saves the bitmap to a file in the Downloads directory.
+     *
+     * @param bitmap The bitmap to save.
+     * @param timestamp The timestamp for the captured image.
+     */
+    private void saveBitmap(Bitmap bitmap, long timestamp) {
+        File downloadsDirectory = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "aware-light/screenshot");
+        if (!downloadsDirectory.exists() && !downloadsDirectory.mkdirs()) {
+            Log.e(TAG, "Failed to create directory: " + downloadsDirectory.getAbsolutePath());
+            return;
+        }
+
+
+        String formattedTimestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(timestamp);
+        File path = new File(downloadsDirectory, "screenshot_" + formattedTimestamp + ".jpg");
+        try (FileOutputStream fos = new FileOutputStream(path)) {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, fos); // Use the selected compression rate
+            fos.flush();
+        } catch (IOException e) {
+            Log.e(TAG, "Error saving screenshot", e);
+        }
+
+        long fileSizeInBytes = path.length();
+        long fileSizeInKB = fileSizeInBytes / 1024;
+
+        Log.d(TAG, "File size: " + fileSizeInKB + " KB");
+    }
+
+    /**
+     * Converts a bitmap to a byte array.
+     *
+     * @param bitmap The bitmap to convert.
+     * @return The byte array representation of the bitmap.
+     */
     private byte[] convertBitmapToByteArray(Bitmap bitmap) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, stream);
         return stream.toByteArray();
     }
 
+    /**
+     * Stores the screenshot metadata (timestamp and image data) in the database.
+     *
+     * @param imageData The byte array representation of the image.
+     * @param timestamp The timestamp for the captured image.
+     */
     private void storeScreenshotMetadata(byte[] imageData, long timestamp) {
         ContentValues values = new ContentValues();
         values.put(ScreenShot_Provider.ScreenshotData.TIMESTAMP, timestamp);
@@ -379,18 +396,27 @@ public class ScreenShot extends Aware_Sensor {
         getContentResolver().insert(ScreenShot_Provider.ScreenshotData.CONTENT_URI, values);
     }
 
+    /**
+     * Stops the screen capturing process by removing the capture runnable from the handler.
+     */
     private void stopCapturing() {
         if (handler != null) {
             handler.removeCallbacks(captureRunnable);
         }
     }
 
+    /**
+     * Starts the screen capturing process by posting the capture runnable to the handler.
+     */
     private void startCapturing() {
         if (handler != null) {
             handler.post(captureRunnable);
         }
     }
 
+    /**
+     * Cleans up resources used by the screen capturing process.
+     */
     private void cleanupResources() {
         Log.d(TAG, "Cleaning up resources");
         stopCapturing();
@@ -413,6 +439,9 @@ public class ScreenShot extends Aware_Sensor {
         sendBroadcast(intent);
     }
 
+    /**
+     * Called when the service is destroyed. Unregisters the broadcast receiver and cleans up resources.
+     */
     @Override
     public void onDestroy() {
         super.onDestroy();

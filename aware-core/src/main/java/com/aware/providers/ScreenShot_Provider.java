@@ -65,7 +65,6 @@ public class ScreenShot_Provider extends ContentProvider {
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
         if (database == null)
             database = dbHelper.getWritableDatabase();
-        Log.d("ScreenShot_Provider", "Database initialized");
     }
 
     public static String getAuthority(Context context) {
@@ -75,21 +74,18 @@ public class ScreenShot_Provider extends ContentProvider {
 
     @Override
     public boolean onCreate() {
-        Log.d("ScreenShot_Provider", "onCreate called");
 
         AUTHORITY = getContext().getPackageName() + ".provider.screenshot";
 
         sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
         sUriMatcher.addURI(AUTHORITY, DATABASE_TABLES[0], SCREENSHOT);
         sUriMatcher.addURI(AUTHORITY, DATABASE_TABLES[0] + "/#", SCREENSHOT_ID);
-        Log.d("ScreenShot_Provider", "UriMatcher setup complete");
 
         screenshotDataMap = new HashMap<String,String>();
         screenshotDataMap.put(ScreenshotData._ID, ScreenshotData._ID);
         screenshotDataMap.put(ScreenshotData.TIMESTAMP, ScreenshotData.TIMESTAMP);
         screenshotDataMap.put(ScreenshotData.DEVICE_ID, ScreenshotData.DEVICE_ID);
         screenshotDataMap.put(ScreenshotData.IMAGE_DATA, ScreenshotData.IMAGE_DATA);
-        Log.d("ScreenShot_Provider", "Provider setup complete");
         return true;
     }
 
@@ -103,8 +99,6 @@ public class ScreenShot_Provider extends ContentProvider {
         byte[] imageData = values.getAsByteArray(ScreenshotData.IMAGE_DATA);
         int imageSize = (imageData != null) ? imageData.length : 0;
 
-        Log.d("ScreenShot_Provider", "Inserting screenshot with timestamp: " + timestamp + " and image size: " + imageSize + " bytes");
-
         database.beginTransaction();
         switch (sUriMatcher.match(uri)){
             case SCREENSHOT:
@@ -115,7 +109,6 @@ public class ScreenShot_Provider extends ContentProvider {
                     Objects.requireNonNull(getContext()).getContentResolver().notifyChange(screenShotUri, null, false);
                     database.setTransactionSuccessful();
                     database.endTransaction();
-                    Log.d("ScreenShot_Provider", "Insert successful, new row id: " + screen_shot_id);
                     return screenShotUri;
                 }
 
