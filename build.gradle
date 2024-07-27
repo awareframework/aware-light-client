@@ -5,7 +5,7 @@ buildscript {
         ion_libs = "2.+"
         google_libs = "17.0.0"
         version_code = 1
-        version_readable = "4.3." + version_code + ".beta"
+        version_readable = "4.4." + version_code + ".beta"
 
         compile_sdk = 28
         target_sdk = 28
