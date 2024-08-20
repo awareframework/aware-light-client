@@ -4,31 +4,43 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/esm_title"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:scrollbars="vertical"
-        android:padding="16dp"
-        android:textSize="18sp"
-        android:textStyle="normal|bold" />
-
-    <TextView
-        android:id="@+id/esm_instructions"
-        android:layout_below="@id/esm_title"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:scrollbars="vertical"
-        android:maxLines="@integer/maxlines_esm_instructions"
-        android:padding="16dp" />
-
-    <LinearLayout
-        android:id="@+id/esm_answers"
-        android:layout_below="@id/esm_instructions"
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:baselineAligned="true"
-        android:layout_alignParentBottom="true"
-        android:padding="10dp" />
+        android:layout_height="match_parent"
+        android:fillViewport="true">
 
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            >
+            <TextView
+                android:id="@+id/esm_title"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="vertical"
+                android:padding="16dp"
+                android:textSize="18sp"
+                android:textStyle="normal|bold" />
+
+            <TextView
+                android:id="@+id/esm_instructions"
+                android:layout_below="@id/esm_title"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="vertical"
+                android:maxLines="@integer/maxlines_esm_instructions"
+                android:padding="16dp" />
+
+            <LinearLayout
+                android:id="@+id/esm_answers"
+                android:layout_below="@id/esm_instructions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="true"
+                android:layout_alignParentBottom="true"
+                android:padding="10dp" />
+        </RelativeLayout>
+    </ScrollView>
 </RelativeLayout>
