@@ -15,8 +15,13 @@
           "value": "x86_64"
         }
       ],
+<<<<<<< HEAD
       "versionCode": 1,
       "versionName": "4.5.1.beta",
+=======
+      "versionCode": 2,
+      "versionName": "4.2.2.beta",
+>>>>>>> 3de17fb (change apk location)
       "outputFile": "aware-phone-x86_64-release.apk"
     },
     {
@@ -27,9 +32,33 @@
           "value": "x86"
         }
       ],
+<<<<<<< HEAD
       "versionCode": 1,
       "versionName": "4.5.1.beta",
+=======
+      "versionCode": 2,
+      "versionName": "4.2.2.beta",
+>>>>>>> 3de17fb (change apk location)
       "outputFile": "aware-phone-x86-release.apk"
+    },
+    {
+      "type": "ONE_OF_MANY",
+      "filters": [
+        {
+          "filterType": "ABI",
+<<<<<<< HEAD
+          "value": "armeabi-v7a"
+        }
+      ],
+      "versionCode": 1,
+      "versionName": "4.5.1.beta",
+=======
+          "value": "armeabi"
+        }
+      ],
+      "versionCode": 2,
+      "versionName": "4.2.2.beta",
+      "outputFile": "aware-phone-armeabi-release.apk"
     },
     {
       "type": "ONE_OF_MANY",
@@ -39,8 +68,9 @@
           "value": "armeabi-v7a"
         }
       ],
-      "versionCode": 1,
-      "versionName": "4.5.1.beta",
+      "versionCode": 2,
+      "versionName": "4.2.2.beta",
+>>>>>>> 3de17fb (change apk location)
       "outputFile": "aware-phone-armeabi-v7a-release.apk"
     },
     {
@@ -51,6 +81,7 @@
           "value": "arm64-v8a"
         }
       ],
+<<<<<<< HEAD
       "versionCode": 1,
       "versionName": "4.5.1.beta",
       "outputFile": "aware-phone-arm64-v8a-release.apk"
@@ -66,6 +97,11 @@
       "versionCode": 1,
       "versionName": "4.5.1.beta",
       "outputFile": "aware-phone-armeabi-release.apk"
+=======
+      "versionCode": 2,
+      "versionName": "4.2.2.beta",
+      "outputFile": "aware-phone-arm64-v8a-release.apk"
+>>>>>>> 3de17fb (change apk location)
     }
   ]
 }
