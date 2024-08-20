@@ -44,6 +44,7 @@ public class ESM_Freetext extends ESM_Question {
         esm_dialog = builder.create();
         esm_dialog.setCanceledOnTouchOutside(false);
 
+
         try {
             TextView esm_title = (TextView) ui.findViewById(R.id.esm_title);
             esm_title.setText(getTitle());
@@ -54,7 +55,6 @@ public class ESM_Freetext extends ESM_Question {
             esm_instructions.setMovementMethod(ScrollingMovementMethod.getInstance());
 
             final EditText feedback = (EditText) ui.findViewById(R.id.esm_feedback);
-            feedback.requestFocus();
             feedback.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
