@@ -54,7 +54,6 @@ public class ESM_Number extends ESM_Question {
             esm_instructions.setMovementMethod(ScrollingMovementMethod.getInstance());
 
             final EditText feedback = (EditText) ui.findViewById(R.id.esm_feedback);
-            feedback.requestFocus();
             feedback.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
