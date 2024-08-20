@@ -8,6 +8,9 @@ Change log for AWARE-Light
 4.3.1.beta
 - New feature to capture screenshots at regular intervals and save them to the device's storage.
 
+4.2.2.beta
+- Fix display issues: long question titles can be displayed completely.
+
 4.2.1.beta
 - New feature to export the aware-light database files to the device's storage.
 
