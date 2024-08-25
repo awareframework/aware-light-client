@@ -26,7 +26,6 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.WindowManager;
@@ -40,7 +39,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public class ScreenShot extends Aware_Sensor {
@@ -75,6 +75,8 @@ public class ScreenShot extends Aware_Sensor {
     private int capture_delay = 3000;
     private int compressionRate = 20;
     private boolean saveToLocalStorage = true;
+    private String foregroundApp;
+    private final Object imageReaderLock = new Object();
 
     private final BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
         @Override
@@ -306,10 +308,16 @@ public class ScreenShot extends Aware_Sensor {
      * Resets the image reader to ensure it can capture new images.
      */
     private void resetImageReader() {
-        imageReader.setOnImageAvailableListener(null, null);
-        imageReader.close();
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
-        virtualDisplay.setSurface(imageReader.getSurface());
+        synchronized (imageReaderLock) {
+            if (imageReader != null) {
+                imageReader.setOnImageAvailableListener(null, null);
+                imageReader.close();
+            }
+            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
+            if (virtualDisplay != null) {
+                virtualDisplay.setSurface(imageReader.getSurface());
+            }
+        }
     }
 
     /**
@@ -319,24 +327,44 @@ public class ScreenShot extends Aware_Sensor {
      * @param timestamp The timestamp for the captured image.
      */
     private void processImage(Image image, long timestamp) {
-        try {
-            Image.Plane[] planes = image.getPlanes();
-            ByteBuffer buffer = planes[0].getBuffer();
-            int pixelStride = planes[0].getPixelStride();
-            int rowStride = planes[0].getRowStride();
-            int rowPadding = rowStride - pixelStride * width;
 
-            Bitmap bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
-            bitmap.copyPixelsFromBuffer(buffer);
-
-            if (saveToLocalStorage){
-                saveBitmap(bitmap, timestamp);
-            } else {
-                byte[] imageData = convertBitmapToByteArray(bitmap);
-                storeScreenshotMetadata(imageData, timestamp);
+        synchronized (imageReaderLock) {
+            if (imageReader == null) {
+                return;
             }
-        } catch (Exception e) {
-            Log.e(TAG, "Error processing image", e);
+            foregroundApp = Applications.getForegroundPackageName();
+
+            if (shouldTakeScreenshot(foregroundApp)) {
+                return;
+            }
+
+            if (shouldTakeScreenshot(foregroundApp)) {
+                return;
+            }
+
+            try {
+                Image.Plane[] planes = image.getPlanes();
+                ByteBuffer buffer = planes[0].getBuffer();
+                int pixelStride = planes[0].getPixelStride();
+                int rowStride = planes[0].getRowStride();
+                int rowPadding = rowStride - pixelStride * width;
+
+                Bitmap bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
+                bitmap.copyPixelsFromBuffer(buffer);
+
+
+                if (saveToLocalStorage) {
+                    saveBitmap(bitmap, timestamp);
+                    Log.d(TAG, "Screenshot saved to local storage");
+                } else {
+                    // Store the screenshot metadata in the database
+                    Log.d(TAG, "Storing screenshot metadata");
+                    byte[] imageData = convertBitmapToByteArray(bitmap);
+                    storeScreenshotMetadata(imageData, timestamp);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error processing image", e);
+            }
         }
     }
 
@@ -392,8 +420,41 @@ public class ScreenShot extends Aware_Sensor {
         values.put(ScreenShot_Provider.ScreenshotData.TIMESTAMP, timestamp);
         values.put(ScreenShot_Provider.ScreenshotData.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
         values.put(ScreenShot_Provider.ScreenshotData.IMAGE_DATA, imageData);
+        values.put(ScreenShot_Provider.ScreenshotData.PACKAGE_NAME, foregroundApp);
 
         getContentResolver().insert(ScreenShot_Provider.ScreenshotData.CONTENT_URI, values);
+    }
+
+    /**
+     * Determines whether to take a screenshot based on the package name.
+     *
+     * @param packageName The package name of the application.
+     * @return True if the screenshot should be taken, false otherwise.
+     */
+    private boolean shouldTakeScreenshot(String packageName) {
+        String packageSpecification = Aware.getSetting(this, Aware_Preferences.SCREENSHOT_PACKAGE_SPECIFICATION);
+        String packageNames = Aware.getSetting(this, Aware_Preferences.SCREENSHOT_PACKAGE_NAMES);
+
+        // Split by comma and/or space
+        String[] packageArray = packageNames.split("[,\\s]+");
+
+        List<String> packageList = new ArrayList<>();
+        for (String pkg : packageArray) {
+            String trimmed = pkg.trim();
+            if (!trimmed.isEmpty()) {
+                packageList.add(trimmed);
+            }
+        }
+
+        switch (packageSpecification) {
+            case "0": // Only track inclusive packages
+                return !packageList.contains(packageName);
+            case "1": // Track all except exclusive packages
+                return packageList.contains(packageName);
+            case "2": // Track all packages
+            default:
+                return false;
+        }
     }
 
     /**
@@ -431,6 +492,13 @@ public class ScreenShot extends Aware_Sensor {
         }
         if (mediaProjection != null) {
             mediaProjection.stop();
+        }
+
+        synchronized (imageReaderLock) {
+            if (imageReader != null) {
+                imageReader.close();
+                imageReader = null;
+            }
         }
 
         // Broadcast that the service has stopped

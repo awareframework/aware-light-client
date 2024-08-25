@@ -104,6 +104,9 @@ public class Applications extends AccessibilityService {
 
     private String previousForegroundApp = "";
 
+    private static String foregroundPackageName = "";
+
+
 //    int mDebugDepth = 0;
 
     private static int screenStatus = 0; //  ACTION_AWARE_SCREEN_OFF ACTION_AWARE_SCREEN_UNLOCKED
@@ -173,9 +176,11 @@ public class Applications extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event.getPackageName() == null) return;
 
-        // if content buffer is full then send all contents in the content buffer
+        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            foregroundPackageName = event.getPackageName().toString();
+        }
+
         if (contentBuffer.size() == TEXT_BUFFER_LIMIT){
-            // Log.d("Screen_Text", "==========LIMIT REACH============");
 
             for (ContentValues content: contentBuffer){
                 getContentResolver().insert(ScreenText_Provider.ScreenTextData.CONTENT_URI, content);
@@ -186,8 +191,6 @@ public class Applications extends AccessibilityService {
             }
             textBuffer.clear();
             contentBuffer.clear();
-
-            // Log.d("Screen_Text", "==========CLEAN BUFFER============");
         }
 
 
@@ -1011,5 +1014,9 @@ public class Applications extends AccessibilityService {
      */
     public static boolean isSystemPackage(PackageInfo pkgInfo) {
         return pkgInfo != null && ((pkgInfo.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 1);
+    }
+
+    public static String getForegroundPackageName() {
+        return foregroundPackageName;
     }
 }

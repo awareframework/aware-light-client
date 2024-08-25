@@ -447,15 +447,36 @@ public class Aware_Preferences {
      */
     public static final String PACKAGE_SPECIFICATION = "package_specification";
 
+    /**
+     * Screenshot function: active screenshot service
+     */
     public static final String STATUS_SCREENSHOT = "status_screenshot";
 
+    /**
+     * Screenshot function: capture interval, in milliseconds
+     */
     public static final String CAPTURE_TIME_INTERVAL = "capture_time_interval";
 
+    /**
+     * Screenshot function: compression rate, in percent
+     */
     public static final String COMPRESS_RATE = "compress_rate";
 
+    /**
+     * Screenshot function: save to local storage
+     */
     public static final String STATUS_SCREENSHOT_LOCAL_STORAGE = "status_screenshot_local_storage";
 
+    /**
+     * Screenshot function: specify to include/exclude packages
+     *
+     */
+    public static final String SCREENSHOT_PACKAGE_SPECIFICATION = "screenshot_package_specification";
 
+    /**
+     * Screenshot function: specific package names that are included/excluded
+     */
+    public static final String SCREENSHOT_PACKAGE_NAMES = "screenshot_package_names";
 
     /**
      * Activate/deactivate temperature sensor log (boolean)

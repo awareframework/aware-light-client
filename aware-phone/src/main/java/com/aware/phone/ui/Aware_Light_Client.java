@@ -244,11 +244,26 @@ public class Aware_Light_Client extends Aware_Activity {
         }
 
         // Check if screenshot preference is changed
+        if (key.equals(Aware_Preferences.STATUS_SCREENSHOT) ||
+                key.equals(Aware_Preferences.STATUS_SCREENSHOT_LOCAL_STORAGE)) {
+            handleScreenshotPreferenceChange(key, value);
+        }
+
+
+    }
+
+    private void handleScreenshotPreferenceChange(String key, String value) {
         if (key.equals(Aware_Preferences.STATUS_SCREENSHOT)) {
             if (value.equals("true")) {
                 checkAndStartScreenshotService();
             } else {
                 stopScreenshotService();
+            }
+        } else if (key.equals(Aware_Preferences.STATUS_SCREENSHOT_LOCAL_STORAGE)) {
+            // Restart the screenshot service if it's currently running
+            if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
+                stopScreenshotService();
+                checkAndStartScreenshotService();
             }
         }
     }
