@@ -1,4 +1,7 @@
 Change log for AWARE-Light
+4.2.2.beta
+- Fix display issues: long question titles can be displayed completely.
+
 
 4.2.1.beta
 
