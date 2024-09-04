@@ -73,5 +73,6 @@
 
     <string name="loading_join_study_title">Retrieving study details</string>
     <string name="loading_join_study_msg">Please wait...</string>
+    <string name="sensor_screenshot">Screenshot</string>
 
 </resources>

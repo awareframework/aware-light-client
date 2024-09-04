@@ -44,6 +44,7 @@ android {
         resValue "string", "provider_timezones", android.defaultConfig.applicationId + ".provider.timezone"
         resValue "string", "provider_traffic", android.defaultConfig.applicationId + ".provider.traffic"
         resValue "string", "provider_wifi", android.defaultConfig.applicationId + ".provider.wifi"
+        resValue "string", "provider_screenshot", android.defaultConfig.applicationId + ".provider.screenshot"
 
         //plugins
         resValue "string", "provider_device_usage", android.defaultConfig.applicationId + ".provider.device_usage"

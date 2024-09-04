@@ -105,6 +105,9 @@ public class Applications extends AccessibilityService {
 
     private String previousForegroundApp = "";
 
+    private static String foregroundPackageName = "";
+
+
     private static List<Integer> sensitiveInputType = Arrays.asList(129, 225, 145);
 //    int mDebugDepth = 0;
 
@@ -182,9 +185,11 @@ public class Applications extends AccessibilityService {
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event.getPackageName() == null) return;
 
-        // if content buffer is full then send all contents in the content buffer
+        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            foregroundPackageName = event.getPackageName().toString();
+        }
+
         if (contentBuffer.size() == TEXT_BUFFER_LIMIT){
-            // Log.d("Screen_Text", "==========LIMIT REACH============");
 
             for (ContentValues content: contentBuffer){
                 getContentResolver().insert(ScreenText_Provider.ScreenTextData.CONTENT_URI, content);
@@ -195,8 +200,6 @@ public class Applications extends AccessibilityService {
             }
             textBuffer.clear();
             contentBuffer.clear();
-
-            // Log.d("Screen_Text", "==========CLEAN BUFFER============");
         }
 
 
@@ -265,15 +268,8 @@ public class Applications extends AccessibilityService {
 
                 // Check if the foreground app has changed
                 if (!currentForegroundApp.equals(previousForegroundApp)) {
+
 //                    // Log.d("Screen_Text", "==========App Switch============");
-                    if (!textBuffer.contains(hashedText)) {
-                        textBuffer.add(hashedText);
-                        contentBuffer.add(screenText);
-//                       // Log.d("Screen_Text", "Add ContentText: " + currScreenText);
-                    }
-
-
-                    // Log.d("Screen_Text", "Current ContentBuffer Size: " + contentBuffer.size());
 
                     for (ContentValues content: contentBuffer){
                         getContentResolver().insert(ScreenText_Provider.ScreenTextData.CONTENT_URI, content);
@@ -288,6 +284,12 @@ public class Applications extends AccessibilityService {
                     // Log.d("Screen_Text", "==========CLEAN BUFFER============");
                     // Update the previous foreground app
                     previousForegroundApp = currentForegroundApp;
+
+                    if (!textBuffer.contains(hashedText)) {
+                        textBuffer.add(hashedText);
+                        contentBuffer.add(screenText);
+//                       // Log.d("Screen_Text", "Add ContentText: " + currScreenText);
+                    }
 
                 } else {
                     // Add to content: get rid of the duplicate text
@@ -1021,5 +1023,9 @@ public class Applications extends AccessibilityService {
      */
     public static boolean isSystemPackage(PackageInfo pkgInfo) {
         return pkgInfo != null && ((pkgInfo.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 1);
+    }
+
+    public static String getForegroundPackageName() {
+        return foregroundPackageName;
     }
 }

@@ -1,14 +1,20 @@
 Change log for AWARE-Light
+4.5.1.beta
+- New feature: Allow users to filter and save screenshots based on specific package names. Support for inclusive or exclusive.
+
+4.4.1.beta
+- New feature to synchronize the screenshot image data to the remote database specified by the aware-light configurator through base64 encoding.
+
+4.3.1.beta
+- New feature to capture screenshots at regular intervals and save them to the device's storage.
+
 4.2.2.beta
 - Fix display issues: long question titles can be displayed completely.
 
-
 4.2.1.beta
-
 - New feature to export the aware-light database files to the device's storage.
 
 4.1.6.beta
-
 - Fixed a crash that occurred when enabling accessibility before starting a study.
 - The screen text sensor now correctly collects duplicate text when the foreground app changes, ensuring that screen text is captured during app switches, home screen access, and notification checks.
 

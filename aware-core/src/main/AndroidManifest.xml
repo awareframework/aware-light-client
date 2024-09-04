@@ -23,6 +23,13 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <queries>
+        <package android:name="com.aware.providers" />
+        <package android:name="com.aware.ui" />
+        <package android:name="com.aware.utils" />
+        <package android:name="com.aware.syncadapters" />
+    </queries>
+
     <application
         android:networkSecurityConfig="@xml/aware_ssl_config">
 
@@ -174,6 +181,12 @@
         <service
             android:name="com.aware.SignificantMotion"
             android:exported="true" />
+        <service
+            android:name="com.aware.ScreenShot"
+            android:exported="true"
+            android:permission="android.permission.FOREGROUND_SERVICE" />
+
+
 
         <receiver
             android:name="com.aware.Aware$Storage_Broadcaster"
@@ -422,6 +435,16 @@
             android:readPermission="com.aware.READ_CONTEXT_DATA"
             android:syncable="true"
             android:writePermission="com.aware.WRITE_CONTEXT_DATA" />
+
+        <provider
+            android:name=".providers.ScreenShot_Provider"
+            android:authorities="${applicationId}.provider.screenshot"
+            android:exported="true"
+            android:label="@string/sensor_screenshot"
+            android:readPermission="com.aware.READ_CONTEXT_DATA"
+            android:syncable="true"
+            android:writePermission="com.aware.WRITE_CONTEXT_DATA" />
+
         <provider
             android:name="com.aware.providers.Significant_Provider"
             android:authorities="${applicationId}.provider.significant"
@@ -440,6 +463,8 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
         </provider>
+
+
 
         <!-- Core Sync-Adapters -->
 
@@ -723,6 +748,18 @@
                 android:name="android.content.SyncAdapter"
                 android:resource="@xml/sync_wifi" />
         </service>
+
+        <service
+            android:name="com.aware.syncadapters.ScreenShot_Sync"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.content.SyncAdapter" />
+            </intent-filter>
+            <meta-data
+                android:name="android.content.SyncAdapter"
+                android:resource="@xml/sync_screenshot" />
+        </service>
+
 
     </application>
 

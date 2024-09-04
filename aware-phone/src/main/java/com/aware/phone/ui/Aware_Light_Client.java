@@ -1,10 +1,11 @@
 package com.aware.phone.ui;
 
 import android.Manifest;
-import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.Dialog;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -17,10 +18,12 @@ import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
+import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.PowerManager;
 import android.preference.CheckBoxPreference;
 import android.preference.EditTextPreference;
@@ -31,20 +34,18 @@ import android.preference.PreferenceGroup;
 import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.ViewGroup;
 import android.widget.ListAdapter;
 import android.widget.Toast;
-import android.view.View;
-import android.widget.ListView;
-import androidx.annotation.NonNull;
-import androidx.core.app.ActivityCompat;
 
 import com.aware.Applications;
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
 import com.aware.phone.R;
 import com.aware.ui.PermissionsHandler;
+import com.aware.ScreenShot;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -69,24 +70,12 @@ import static com.aware.Aware.setNotificationProperties;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-
-import android.Manifest;
-import android.content.Intent;
-import android.net.Uri;
-import android.os.Bundle;
 import android.os.Environment;
-import android.view.View;
-import android.widget.Button;
-import android.widget.Toast;
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
+
 
 /**
  *
@@ -97,11 +86,19 @@ public class Aware_Light_Client extends Aware_Activity {
     private static Hashtable<Integer, Boolean> listSensorType;
     private static SharedPreferences prefs;
     public static final int REQUEST_CODE_OPEN_DIRECTORY = 1000;
-    public static final int REQUEST_CODE_STORAGE_PERMISSION = 1001;
+    public static final int REQUEST_CODE_SCREENSHOT = 1002;
     private static final ArrayList<String> REQUIRED_PERMISSIONS = new ArrayList<>();
     private static final Hashtable<String, Integer> optionalSensors = new Hashtable<>();
-
     private final Aware.AndroidPackageMonitor packageMonitor = new Aware.AndroidPackageMonitor();
+
+    private BroadcastReceiver screenshotServiceStoppedReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (ScreenShot.ACTION_SCREENSHOT_SERVICE_STOPPED.equals(intent.getAction())) {
+                checkAndStartScreenshotService();
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -114,6 +111,7 @@ public class Aware_Light_Client extends Aware_Activity {
         if (Aware.isStudy(getApplicationContext())) {
             addPreferencesFromResource(R.xml.pref_aware_light);
         } else {
+
             addPreferencesFromResource(R.xml.pref_aware_device);
         }
 //        hideUnusedPreferences();
@@ -180,6 +178,13 @@ public class Aware_Light_Client extends Aware_Activity {
             whitelisting.setData(Uri.parse("package:" + getPackageName()));
             startActivity(whitelisting);
         }
+
+        Log.d("AWARE::Screenshot","Print " + Aware.getSetting(getApplicationContext(),Aware_Preferences.STATUS_SCREENSHOT));
+
+        // Register the broadcast receiver
+        registerReceiver(screenshotServiceStoppedReceiver, new IntentFilter(ScreenShot.ACTION_SCREENSHOT_SERVICE_STOPPED));
+        registerReceiver(screenshotStatusReceiver, new IntentFilter(ScreenShot.ACTION_SCREENSHOT_STATUS));
+        checkAndStartScreenshotService();
     }
 
     @Override
@@ -236,6 +241,30 @@ public class Aware_Light_Client extends Aware_Activity {
         if (ListPreference.class.isInstance(pref)) {
             ListPreference list = (ListPreference) findPreference(key);
             list.setSummary(list.getEntry());
+        }
+
+        // Check if screenshot preference is changed
+        if (key.equals(Aware_Preferences.STATUS_SCREENSHOT) ||
+                key.equals(Aware_Preferences.STATUS_SCREENSHOT_LOCAL_STORAGE)) {
+            handleScreenshotPreferenceChange(key, value);
+        }
+
+
+    }
+
+    private void handleScreenshotPreferenceChange(String key, String value) {
+        if (key.equals(Aware_Preferences.STATUS_SCREENSHOT)) {
+            if (value.equals("true")) {
+                checkAndStartScreenshotService();
+            } else {
+                stopScreenshotService();
+            }
+        } else if (key.equals(Aware_Preferences.STATUS_SCREENSHOT_LOCAL_STORAGE)) {
+            // Restart the screenshot service if it's currently running
+            if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
+                stopScreenshotService();
+                checkAndStartScreenshotService();
+            }
         }
     }
 
@@ -360,6 +389,115 @@ public class Aware_Light_Client extends Aware_Activity {
         }
     }
 
+    private BroadcastReceiver screenshotStatusReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (ScreenShot.ACTION_SCREENSHOT_STATUS.equals(intent.getAction())) {
+                String status = intent.getStringExtra(ScreenShot.EXTRA_SCREENSHOT_STATUS);
+                if (ScreenShot.STATUS_RETRY_COUNT_EXCEEDED.equals(status)) {
+                    Log.d(TAG, "Screenshot service retry count exceeded. Restarting service...");
+                    restartScreenshotService();
+                }
+            }
+        }
+    };
+
+    private void restartScreenshotService() {
+        stopScreenshotService();
+        // Optionally wait for a few seconds before restarting the service to avoid rapid restarts
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                checkAndStartScreenshotService();
+            }
+        }, 2000); // Wait for 2 seconds before restarting
+    }
+
+    private void checkAndStartScreenshotService() {
+        if (!isAccessibilityServiceEnabled(this, Applications.class)) {
+            enableAccessibilityService();
+            return;
+        }
+
+        if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
+            if (ScreenShot.mediaProjectionResultCode != 0 && ScreenShot.mediaProjectionResultData != null) {
+                if (!isScreenshotServiceRunning()) {
+                    startScreenshotService(ScreenShot.mediaProjectionResultCode, ScreenShot.mediaProjectionResultData);
+                }
+            } else {
+                MediaProjectionManager projectionManager = (MediaProjectionManager) this.getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+                Intent intent = projectionManager.createScreenCaptureIntent();
+                startActivityForResult(intent, REQUEST_CODE_SCREENSHOT);
+            }
+        }
+    }
+
+    private void enableAccessibilityService() {
+        Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+        Toast.makeText(this, "Please enable the accessibility service.", Toast.LENGTH_LONG).show();
+    }
+
+
+    private boolean isScreenshotServiceRunning() {
+        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (ScreenShot.class.getName().equals(service.service.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void startScreenshotService(int resultCode, Intent resultData) {
+        int defaultCaptureInterval = 5; // Default capture interval in seconds
+        int defaultCompressRate = 20;   // Default compression rate
+        boolean defaultSaveToLocal = true; // Default to not save to local storage
+
+        String captureIntervalSetting = Aware.getSetting(getApplicationContext(), Aware_Preferences.CAPTURE_TIME_INTERVAL);
+        String compressRateSetting = Aware.getSetting(getApplicationContext(), Aware_Preferences.COMPRESS_RATE);
+        String saveToLocalSetting = Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT_LOCAL_STORAGE);
+
+        int captureInterval = defaultCaptureInterval;
+        int compressRate = defaultCompressRate;
+        boolean saveToLocal = defaultSaveToLocal;
+
+        if (!captureIntervalSetting.isEmpty()) {
+            try {
+                captureInterval = Integer.parseInt(captureIntervalSetting);
+            } catch (NumberFormatException e) {
+                captureInterval = defaultCaptureInterval;
+            }
+        }
+
+        if (!compressRateSetting.isEmpty()) {
+            try {
+                compressRate = Integer.parseInt(compressRateSetting);
+            } catch (NumberFormatException e) {
+                compressRate = defaultCompressRate;
+            }
+        }
+
+        if (!saveToLocalSetting.isEmpty()) {
+            saveToLocal = Boolean.parseBoolean(saveToLocalSetting);
+        }
+
+        Intent serviceIntent = new Intent(this, ScreenShot.class);
+        serviceIntent.putExtra(ScreenShot.MEDIA_PROJECTION_RESULT_CODE, resultCode);
+        serviceIntent.putExtra(ScreenShot.MEDIA_PROJECTION_RESULT_DATA, resultData);
+        serviceIntent.putExtra(ScreenShot.CAPTURE_TIME_INTERVAL, captureInterval * 1000); // Convert to milliseconds
+        serviceIntent.putExtra(ScreenShot.COMPRESS_RATE, compressRate);
+        serviceIntent.putExtra(ScreenShot.STATUS_SCREENSHOT_LOCAL_STORAGE, saveToLocal);
+        ContextCompat.startForegroundService(this, serviceIntent);
+    }
+
+
+    private void stopScreenshotService() {
+        Intent serviceIntent = new Intent(this, ScreenShot.class);
+        stopService(serviceIntent);
+    }
+
     /**
      * Checks if the application is running on an emulator.
      *
@@ -481,7 +619,56 @@ public class Aware_Light_Client extends Aware_Activity {
             }
             // Log.d("export_data", "Output folder URI: " + pickedDir.getUri().toString());
         }
+
+//        if (requestCode == ScreenshotCapturePref.REQUEST_CODE_SCREENSHOT && resultCode == RESULT_OK) {
+//            Log.d(TAG, "Starting ScreenCaptureService with result data");
+//            Intent intent = new Intent(this, ScreenshotCaptureService.class);
+//            intent.putExtra(ScreenshotCaptureService.MEDIA_PROJECTION_RESULT_CODE, resultCode);
+//            intent.putExtra(ScreenshotCaptureService.MEDIA_PROJECTION_RESULT_DATA, data);
+//            ContextCompat.startForegroundService(this, intent);
+//        } else {
+//            Toast.makeText(this, "Screen capture permission denied.", Toast.LENGTH_SHORT).show();
+//            Log.d(TAG, "Screen capture permission denied");
+//        }
+
+        if (requestCode == REQUEST_CODE_SCREENSHOT) {
+
+            if (resultCode == RESULT_OK) {
+                startScreenshotService(resultCode, data);
+            } else {
+                Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show();
+            }
+        }
     }
+
+    private boolean isAccessibilityServiceEnabled(Context context, Class<?> accessibilityServiceClass) {
+        int accessibilityEnabled = 0;
+        final String service = context.getPackageName() + "/" + accessibilityServiceClass.getCanonicalName();
+        try {
+            accessibilityEnabled = Settings.Secure.getInt(context.getApplicationContext().getContentResolver(), Settings.Secure.ACCESSIBILITY_ENABLED);
+        } catch (Settings.SettingNotFoundException e) {
+            Log.e(TAG, "Error finding setting, default accessibility to not found: " + e.getMessage());
+        }
+
+        TextUtils.SimpleStringSplitter colonSplitter = new TextUtils.SimpleStringSplitter(':');
+
+        if (accessibilityEnabled == 1) {
+            String settingValue = Settings.Secure.getString(context.getApplicationContext().getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (settingValue != null) {
+                colonSplitter.setString(settingValue);
+                while (colonSplitter.hasNext()) {
+                    String componentName = colonSplitter.next();
+
+                    if (componentName.equalsIgnoreCase(service)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
 
 
     @Override
@@ -691,7 +878,9 @@ public class Aware_Light_Client extends Aware_Activity {
         }
         Log.d("AWARE-Light_Client", "AWARE-Light interface cleaned from the list of frequently used apps");
         super.onDestroy();
+        unregisterReceiver(screenshotStatusReceiver);
         unregisterReceiver(packageMonitor);
+        unregisterReceiver(screenshotServiceStoppedReceiver);
     }
 
     private void hideUnusedPreferences() {

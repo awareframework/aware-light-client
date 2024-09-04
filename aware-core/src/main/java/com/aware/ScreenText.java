@@ -1,10 +1,7 @@
 package com.aware;
 
-
-import android.accessibilityservice.AccessibilityService;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -12,20 +9,9 @@ import android.content.SyncRequest;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
-import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityNodeInfo;
-
-import androidx.legacy.content.WakefulBroadcastReceiver;
-
-import com.aware.providers.Applications_Provider;
-import com.aware.providers.Aware_Provider;
-import com.aware.providers.Keyboard_Provider;
 import com.aware.providers.ScreenText_Provider;
-import com.aware.providers.Screen_Provider;
 import com.aware.utils.Aware_Sensor;
-import com.aware.utils.Scheduler;
-import java.util.Timer;
-import java.util.TimerTask;
+
 
 
 
@@ -151,8 +137,4 @@ public class ScreenText extends Aware_Sensor {
     }
 
 
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
 }
