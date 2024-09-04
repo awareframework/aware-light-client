@@ -1,4 +1,7 @@
 Change log for AWARE-Light
+4.5.1.beta
+- New feature: Allow users to filter and save screenshots based on specific package names. Support for inclusive or exclusive.
+
 4.4.1.beta
 - New feature to synchronize the screenshot image data to the remote database specified by the aware-light configurator through base64 encoding.
 
