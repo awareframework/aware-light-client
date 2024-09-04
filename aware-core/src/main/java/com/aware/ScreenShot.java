@@ -338,10 +338,6 @@ public class ScreenShot extends Aware_Sensor {
                 return;
             }
 
-            if (shouldTakeScreenshot(foregroundApp)) {
-                return;
-            }
-
             try {
                 Image.Plane[] planes = image.getPlanes();
                 ByteBuffer buffer = planes[0].getBuffer();
