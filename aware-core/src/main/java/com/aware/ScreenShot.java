@@ -76,6 +76,7 @@ public class ScreenShot extends Aware_Sensor {
     private int compressionRate = 20;
     private boolean saveToLocalStorage = true;
     private String foregroundApp;
+    private String application_name;
     private final Object imageReaderLock = new Object();
 
     private final BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
@@ -333,6 +334,7 @@ public class ScreenShot extends Aware_Sensor {
                 return;
             }
             foregroundApp = Applications.getForegroundPackageName();
+            application_name = Applications.getForegroundApplicationName();
 
             if (shouldTakeScreenshot(foregroundApp)) {
                 return;
@@ -352,12 +354,12 @@ public class ScreenShot extends Aware_Sensor {
                 if (saveToLocalStorage) {
                     saveBitmap(bitmap, timestamp);
                     Log.d(TAG, "Screenshot saved to local storage");
-                } else {
-                    // Store the screenshot metadata in the database
-                    Log.d(TAG, "Storing screenshot metadata");
-                    byte[] imageData = convertBitmapToByteArray(bitmap);
-                    storeScreenshotMetadata(imageData, timestamp);
                 }
+
+                Log.d(TAG, "Storing screenshot metadata");
+                byte[] imageData = convertBitmapToByteArray(bitmap);
+                storeScreenshotMetadata(imageData, timestamp);
+
             } catch (Exception e) {
                 Log.e(TAG, "Error processing image", e);
             }
@@ -417,6 +419,7 @@ public class ScreenShot extends Aware_Sensor {
         values.put(ScreenShot_Provider.ScreenshotData.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
         values.put(ScreenShot_Provider.ScreenshotData.IMAGE_DATA, imageData);
         values.put(ScreenShot_Provider.ScreenshotData.PACKAGE_NAME, foregroundApp);
+        values.put(ScreenShot_Provider.ScreenshotData.APPLICATION_NAME, application_name);
 
         getContentResolver().insert(ScreenShot_Provider.ScreenshotData.CONTENT_URI, values);
     }

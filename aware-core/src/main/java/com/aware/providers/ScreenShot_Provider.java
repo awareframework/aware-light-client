@@ -46,6 +46,7 @@ public class ScreenShot_Provider extends ContentProvider {
         public static final String DEVICE_ID = "device_id";
         public static final String IMAGE_DATA = "image_data";
         public static final String PACKAGE_NAME = "package_name";
+        public static final String APPLICATION_NAME = "application_name";
     }
 
     public static final String DATABASE_NAME = "screenshot.db";
@@ -54,6 +55,7 @@ public class ScreenShot_Provider extends ContentProvider {
             ScreenshotData._ID + " integer primary key autoincrement,"
                     + ScreenshotData.TIMESTAMP + " real default 0,"
                     + ScreenshotData.PACKAGE_NAME + " text default '',"
+                    + ScreenshotData.APPLICATION_NAME + " text default '',"
                     + ScreenshotData.DEVICE_ID + " text default '',"
                     + ScreenshotData.IMAGE_DATA + " blob"
     };
@@ -89,6 +91,8 @@ public class ScreenShot_Provider extends ContentProvider {
         screenshotDataMap.put(ScreenshotData.DEVICE_ID, ScreenshotData.DEVICE_ID);
         screenshotDataMap.put(ScreenshotData.IMAGE_DATA, ScreenshotData.IMAGE_DATA);
         screenshotDataMap.put(ScreenshotData.PACKAGE_NAME, ScreenshotData.PACKAGE_NAME);
+        screenshotDataMap.put(ScreenshotData.APPLICATION_NAME, ScreenshotData.APPLICATION_NAME);
+
         return true;
     }
 
