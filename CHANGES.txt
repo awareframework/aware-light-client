@@ -1,4 +1,7 @@
 Change log for AWARE-Light
+4.5.2.beta
+- Screenshot sensor can capture application name for foreground app.
+
 4.5.1.beta
 - New feature: Allow users to filter and save screenshots based on specific package names. Support for inclusive or exclusive.
 
