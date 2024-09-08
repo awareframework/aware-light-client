@@ -107,6 +107,8 @@ public class Applications extends AccessibilityService {
 
     private static String foregroundPackageName = "";
 
+    private static String foregroundApplicationName = "";
+
 
     private static List<Integer> sensitiveInputType = Arrays.asList(129, 225, 145);
 //    int mDebugDepth = 0;
@@ -161,7 +163,9 @@ public class Applications extends AccessibilityService {
      * @param package_name
      * @return appName
      */
-    private String getApplicationName(String package_name) {
+    public String getApplicationName(String package_name) {
+
+        Log.d("Screenshot", "package_name: " + package_name);
         PackageManager packageManager = getPackageManager();
         ApplicationInfo appInfo;
         try {
@@ -173,6 +177,8 @@ public class Applications extends AccessibilityService {
         if (appInfo != null && packageManager.getApplicationLabel(appInfo) != null) {
             appName = (String) packageManager.getApplicationLabel(appInfo);
         }
+
+        Log.d("Screenshot", "appName: " + appName);
         return appName;
     }
 
@@ -187,6 +193,7 @@ public class Applications extends AccessibilityService {
 
         if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             foregroundPackageName = event.getPackageName().toString();
+            foregroundApplicationName = getApplicationName(foregroundPackageName);
         }
 
         if (contentBuffer.size() == TEXT_BUFFER_LIMIT){
@@ -1027,5 +1034,9 @@ public class Applications extends AccessibilityService {
 
     public static String getForegroundPackageName() {
         return foregroundPackageName;
+    }
+
+    public static String getForegroundApplicationName() {
+        return foregroundApplicationName;
     }
 }
