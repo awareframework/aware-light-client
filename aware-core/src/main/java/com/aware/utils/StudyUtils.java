@@ -263,7 +263,6 @@ public class StudyUtils extends IntentService {
             Aware.setSetting(context, Aware_Preferences.WEBSERVICE_SERVER, webserviceServer);
             JSONObject studyConfig = configs.getJSONObject(0);  // use first config
             JSONObject studyInfo = studyConfig.getJSONObject("study_info");
-
             // Set database settings
             JSONObject dbConfig = studyConfig.getJSONObject("database");
             Aware.setSetting(context, Aware_Preferences.DB_HOST, dbConfig.getString("database_host"));
@@ -380,7 +379,6 @@ public class StudyUtils extends IntentService {
                 for (int j = 0; j < questionIds.length(); j++) {
                     questionObjects.put(esm_questions.get(questionIds.getString(j)));
                 }
-
                 createEsmSchedule(context, scheduleJson, questionObjects);
             } catch (JSONException e) {
                 e.printStackTrace();
@@ -424,10 +422,10 @@ public class StudyUtils extends IntentService {
         try {
             String type = scheduleJson.getString("type");
             String title = scheduleJson.getString("title");
+            String replace = scheduleJson.getString("esm_replace");
             Scheduler.Schedule schedule = new Scheduler.Schedule(title);
 
             if (Aware.DEBUG) Log.d(Aware.TAG, "Creating ESM schedule: " + scheduleJson.toString());
-
             // Set schedule parameters
             switch (type) {
                 case "interval":
@@ -462,6 +460,7 @@ public class StudyUtils extends IntentService {
             // Set trigger for ESMs as the schedule's title
             for (int i = 0; i < esmsArray.length(); i ++) {
                 esmsArray.getJSONObject(i).getJSONObject("esm").put(ESM_Question.esm_trigger, title);
+                esmsArray.getJSONObject(i).getJSONObject("esm").put(ESM_Question.esm_replace, replace);
             }
 
             schedule.setActionType(Scheduler.ACTION_TYPE_BROADCAST)

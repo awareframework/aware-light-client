@@ -1,4 +1,8 @@
 Change log for AWARE-Light
+
+4.5.3.beta
+- New feature: Allow users to choose to replace pending ESM questions each time a new schedule is triggered.
+
 4.5.2.beta
 - Screenshot sensor can capture application name for foreground app.
 

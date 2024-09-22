@@ -360,9 +360,8 @@ public class ESM extends Aware_Sensor {
 
             for (int i = 0; i < esms.length(); i++) {
                 JSONObject esm = esms.getJSONObject(i).getJSONObject(EXTRA_ESM);
-
                 if (i == 0) { // we check the first ESM item in the queue to see whether any current queue items need to be removed
-                    if (esm.optBoolean("esm_replace_queue")) { // clear current queue
+                    if (esm.optBoolean("esm_replace")) { // clear current queue
                         if (Aware.DEBUG)
                             Log.d(TAG, "Clearing ESM queue before adding new ESM to queue");
 
@@ -378,7 +377,8 @@ public class ESM extends Aware_Sensor {
                                 ContentValues rowData = new ContentValues();
                                 rowData.put(ESM_Data.ANSWER_TIMESTAMP, System.currentTimeMillis());
                                 rowData.put(ESM_Data.STATUS, ESM.STATUS_REPLACED);
-                                context.getContentResolver().update(ESM_Data.CONTENT_URI, rowData, ESM_Data._ID + "=" + esm_cursor.getInt(esm_cursor.getColumnIndex(ESM_Data._ID)), null);
+                                context.getContentResolver().update(ESM_Data.CONTENT_URI, rowData,  ESM_Data._ID + "=" + esm_cursor.getInt(esm_cursor.getColumnIndex(ESM_Data._ID)) +
+                                        " AND " + ESM_Data.TRIGGER + "='" + esm.optString(ESM_Data.TRIGGER) + "'", null);
                             } while (esm_cursor.moveToNext());
                         }
                         if (esm_cursor != null && !esm_cursor.isClosed()) esm_cursor.close();
