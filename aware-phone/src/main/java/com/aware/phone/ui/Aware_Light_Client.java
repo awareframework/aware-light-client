@@ -36,6 +36,7 @@ import android.preference.PreferenceScreen;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.widget.ListAdapter;
 import android.widget.Toast;
@@ -46,6 +47,7 @@ import com.aware.Aware_Preferences;
 import com.aware.phone.R;
 import com.aware.ui.PermissionsHandler;
 import com.aware.ScreenShot;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -59,6 +61,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -107,11 +110,14 @@ public class Aware_Light_Client extends Aware_Activity {
         prefs = getSharedPreferences("com.aware.phone", Context.MODE_PRIVATE);
 
         // Initialize views
-        setContentView(R.layout.activity_aware_light);
         if (Aware.isStudy(getApplicationContext())) {
+            setContentView(R.layout.activity_aware_study);
             addPreferencesFromResource(R.xml.pref_aware_light);
-        } else {
 
+            // Initialize bottom navigation
+            setupBottomNavigation();
+        } else {
+            setContentView(R.layout.activity_aware_light);
             addPreferencesFromResource(R.xml.pref_aware_device);
         }
 //        hideUnusedPreferences();
@@ -185,6 +191,32 @@ public class Aware_Light_Client extends Aware_Activity {
         registerReceiver(screenshotServiceStoppedReceiver, new IntentFilter(ScreenShot.ACTION_SCREENSHOT_SERVICE_STOPPED));
         registerReceiver(screenshotStatusReceiver, new IntentFilter(ScreenShot.ACTION_SCREENSHOT_STATUS));
         checkAndStartScreenshotService();
+    }
+
+    private void setupBottomNavigation() {
+        BottomNavigationView bottomNavigationView = findViewById(R.id.aware_bottombar);
+        if (bottomNavigationView != null) {
+            bottomNavigationView.setOnNavigationItemSelectedListener(new BottomNavigationView.OnNavigationItemSelectedListener() {
+                @Override
+                public boolean onNavigationItemSelected(@NonNull MenuItem item) {
+                    switch (item.getItemId()) {
+                        case R.id.aware_sensors: //Sensors
+                            Intent sensors_ui = new Intent(getApplicationContext(), Aware_Light_Client.class);
+                            startActivity(sensors_ui);
+                            break;
+                        case R.id.aware_plugins: //Plugins
+                            Intent pluginsManager = new Intent(getApplicationContext(), Plugins_Manager.class);
+                            startActivity(pluginsManager);
+                            break;
+                        case R.id.aware_stream: //Stream
+                            Intent stream_ui = new Intent(getApplicationContext(), Stream_UI.class);
+                            startActivity(stream_ui);
+                            break;
+                    }
+                    return true;
+                }
+            });
+        }
     }
 
     @Override

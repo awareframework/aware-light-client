@@ -7,39 +7,22 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-<!--    <ScrollView-->
-<!--        android:layout_width="match_parent"-->
-<!--        android:layout_height="match_parent">-->
-<!--        <LinearLayout-->
-<!--            android:layout_width="match_parent"-->
-<!--            android:layout_height="match_parent"-->
-<!--            android:orientation="vertical">-->
-
             <ListView
                 android:id="@android:id/list"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
-<!--            <Button-->
-<!--                android:id="@+id/btn_join_study"-->
+<!--            <com.google.android.material.bottomnavigation.BottomNavigationView-->
+<!--                xmlns:android="http://schemas.android.com/apk/res/android"-->
+<!--                xmlns:app="http://schemas.android.com/apk/res-auto"-->
+<!--                android:id="@+id/aware_bottombar"-->
 <!--                android:layout_width="match_parent"-->
 <!--                android:layout_height="wrap_content"-->
-<!--                android:layout_below="@android:id/list"-->
-<!--                android:background="@color/primaryDark"-->
-<!--                android:text="@string/join_study"-->
-<!--                android:textColor="@android:color/white"-->
-<!--                android:layout_margin="5dp" />-->
-
-<!--            <Button-->
-<!--                android:id="@+id/btn_quit_study"-->
-<!--                android:layout_width="match_parent"-->
-<!--                android:layout_height="wrap_content"-->
-<!--                android:layout_below="@android:id/list"-->
-<!--                android:background="@android:color/holo_red_light"-->
-<!--                android:text="@string/quit_study"-->
-<!--                android:textColor="@android:color/white"-->
-<!--                android:layout_margin="5dp" />-->
-<!--        </LinearLayout>-->
-<!--    </ScrollView>-->
+<!--                android:layout_alignParentBottom="true"-->
+<!--                android:layout_gravity="start|bottom"-->
+<!--                app:itemBackground="@color/primary"-->
+<!--                app:itemIconTint="@android:color/white"-->
+<!--                app:itemTextColor="@android:color/white"-->
+<!--                app:menu="@menu/aware_bottomnav" />-->
 
 </androidx.appcompat.widget.LinearLayoutCompat>
