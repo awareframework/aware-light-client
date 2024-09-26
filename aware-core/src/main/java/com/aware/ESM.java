@@ -362,7 +362,7 @@ public class ESM extends Aware_Sensor {
                 JSONObject esm = esms.getJSONObject(i).getJSONObject(EXTRA_ESM);
 
                 if (i == 0) { // we check the first ESM item in the queue to see whether any current queue items need to be removed
-                    if (esm.optBoolean("esm_replace_queue")) { // clear current queue
+                    if (!esm.optBoolean("esm_keep")) { // clear current queue
                         if (Aware.DEBUG)
                             Log.d(TAG, "Clearing ESM queue before adding new ESM to queue");
 
