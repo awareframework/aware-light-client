@@ -269,6 +269,8 @@ public class Aware_Light_Client extends Aware_Activity {
     }
 
     private class SettingsSync extends AsyncTask<Preference, Preference, Void> {
+        private static final String TAG = "SettingsSync";
+
         @Override
         protected Void doInBackground(Preference... params) {
             for (Preference pref : params) {
@@ -280,112 +282,141 @@ public class Aware_Light_Client extends Aware_Activity {
         @Override
         protected void onProgressUpdate(Preference... values) {
             super.onProgressUpdate(values);
+            for (Preference pref : values) {
+                syncPreference(pref);
+            }
+        }
 
-            Preference pref = values[0];
+        private void syncPreference(Preference pref) {
+            if (pref == null || getPreferenceParent(pref) == null) {
+                return;
+            }
 
-            if (pref != null) Log.i(TAG, "Syncing pref with key: " + pref.getKey());
-            if (getPreferenceParent(pref) == null) return;
+            Log.i(TAG, "Syncing pref with key: " + pref.getKey());
 
-            if (CheckBoxPreference.class.isInstance(pref)) {
-                CheckBoxPreference check = (CheckBoxPreference) findPreference(pref.getKey());
-                check.setChecked(Aware.getSetting(getApplicationContext(), pref.getKey()).equals("true"));
-                if (check.isChecked()) {
-                    if (pref.getKey().equalsIgnoreCase(Aware_Preferences.STATUS_WEBSERVICE)) {
-                        if (Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER).length() == 0) {
-                            Toast.makeText(getApplicationContext(), "Study URL missing...", Toast.LENGTH_SHORT).show();
-                        } else if (!Aware.isStudy(getApplicationContext())) {
-                            //Shows UI to allow the user to join study
-                            Intent joinStudy = new Intent(getApplicationContext(), Aware_Join_Study.class);
-                            joinStudy.putExtra(Aware_Join_Study.EXTRA_STUDY_URL, Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER));
-                            startActivity(joinStudy);
-                        }
-                    }
-                    if (pref.getKey().equalsIgnoreCase(Aware_Preferences.FOREGROUND_PRIORITY)) {
-                        sendBroadcast(new Intent(Aware.ACTION_AWARE_PRIORITY_FOREGROUND));
-                    }
-                } else {
-                    if (pref.getKey().equalsIgnoreCase(Aware_Preferences.FOREGROUND_PRIORITY)) {
-                        sendBroadcast(new Intent(Aware.ACTION_AWARE_PRIORITY_BACKGROUND));
+            if (pref instanceof CheckBoxPreference) {
+                syncCheckBoxPreference((CheckBoxPreference) pref);
+            } else if (pref instanceof EditTextPreference) {
+                syncEditTextPreference((EditTextPreference) pref);
+            } else if (pref instanceof ListPreference) {
+                syncListPreference((ListPreference) pref);
+            }
+
+            if (pref.getParent() instanceof PreferenceScreen) {
+                syncPreferenceScreen((PreferenceScreen) pref.getParent());
+            }
+        }
+
+        private void syncCheckBoxPreference(CheckBoxPreference check) {
+            boolean isChecked = Aware.getSetting(getApplicationContext(), check.getKey()).equals("true");
+            check.setChecked(isChecked);
+
+            if (isChecked) {
+                handleCheckedPreference(check);
+            } else {
+                handleUncheckedPreference(check);
+            }
+        }
+
+        private void handleCheckedPreference(CheckBoxPreference check) {
+            String key = check.getKey();
+            if (key.equalsIgnoreCase(Aware_Preferences.STATUS_WEBSERVICE)) {
+                handleWebServicePreference();
+            } else if (key.equalsIgnoreCase(Aware_Preferences.FOREGROUND_PRIORITY)) {
+                sendBroadcast(new Intent(Aware.ACTION_AWARE_PRIORITY_FOREGROUND));
+            }
+        }
+
+        private void handleUncheckedPreference(CheckBoxPreference check) {
+            if (check.getKey().equalsIgnoreCase(Aware_Preferences.FOREGROUND_PRIORITY)) {
+                sendBroadcast(new Intent(Aware.ACTION_AWARE_PRIORITY_BACKGROUND));
+            }
+        }
+
+        private void handleWebServicePreference() {
+            String serverSetting = Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER);
+            if (serverSetting.isEmpty()) {
+                Toast.makeText(getApplicationContext(), "Study URL missing...", Toast.LENGTH_SHORT).show();
+            } else if (!Aware.isStudy(getApplicationContext())) {
+                Intent joinStudy = new Intent(getApplicationContext(), Aware_Join_Study.class);
+                joinStudy.putExtra(Aware_Join_Study.EXTRA_STUDY_URL, serverSetting);
+                startActivity(joinStudy);
+            }
+        }
+
+        private void syncEditTextPreference(EditTextPreference text) {
+            String value = Aware.getSetting(getApplicationContext(), text.getKey());
+            text.setText(value);
+            text.setSummary(value);
+        }
+
+        private void syncListPreference(ListPreference list) {
+            list.setSummary(list.getEntry());
+        }
+
+        private void syncPreferenceScreen(PreferenceScreen parent) {
+            boolean prefEnabled = Boolean.parseBoolean(Aware.getSetting(Aware_Light_Client.this, Aware_Preferences.ENABLE_CONFIG_UPDATE));
+            parent.setEnabled(prefEnabled);
+
+            boolean isActive = isAnyChildActive(parent);
+            boolean isActiveInConfig = isActiveInStudyConfig(parent);
+
+            if (isActiveInConfig) {
+                updatePreferenceIcon(parent, isActive);
+            } else {
+                removeInactivePreference(parent);
+            }
+        }
+
+        private boolean isAnyChildActive(PreferenceScreen parent) {
+            ListAdapter children = parent.getRootAdapter();
+            for (int i = 0; i < children.getCount(); i++) {
+                Object obj = children.getItem(i);
+                if (obj instanceof CheckBoxPreference) {
+                    CheckBoxPreference child = (CheckBoxPreference) obj;
+                    if (child.getKey().contains("status_") && child.isChecked()) {
+                        return true;
                     }
                 }
             }
+            return false;
+        }
 
-            if (EditTextPreference.class.isInstance(pref)) {
-                EditTextPreference text = (EditTextPreference) findPreference(pref.getKey());
-                text.setText(Aware.getSetting(getApplicationContext(), pref.getKey()));
-                text.setSummary(Aware.getSetting(getApplicationContext(), pref.getKey()));
-            }
-
-            if (ListPreference.class.isInstance(pref)) {
-                ListPreference list = (ListPreference) findPreference(pref.getKey());
-                list.setSummary(list.getEntry());
-            }
-
-            if (PreferenceScreen.class.isInstance(getPreferenceParent(pref))) {
-                PreferenceScreen parent = (PreferenceScreen) getPreferenceParent(pref);
-
-                boolean prefEnabled = Boolean.valueOf(Aware.getSetting(Aware_Light_Client.this, Aware_Preferences.ENABLE_CONFIG_UPDATE));
-                parent.setEnabled(prefEnabled);  // enabled/disabled based on config
-
-                ListAdapter children = parent.getRootAdapter();
-                boolean isActive = false;
-                ArrayList sensorStatuses = new ArrayList<String>();
-                for (int i = 0; i < children.getCount(); i++) {
-                    Object obj = children.getItem(i);
-                    if (CheckBoxPreference.class.isInstance(obj)) {
-                        CheckBoxPreference child = (CheckBoxPreference) obj;
-                        if (child.getKey().contains("status_")) {
-                            sensorStatuses.add(child.getKey());
-                            if (child.isChecked()) {
-                                isActive = true;
-                                break;
-                            }
-                        }
+        private boolean isActiveInStudyConfig(PreferenceScreen parent) {
+            JSONObject studyConfig = Aware.getStudyConfig(getApplicationContext(), Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER));
+            try {
+                JSONArray sensorsList = studyConfig.getJSONArray("sensors");
+                for (int i = 0; i < sensorsList.length(); i++) {
+                    JSONObject sensorInfo = sensorsList.getJSONObject(i);
+                    String sensorSetting = sensorInfo.getString("setting");
+                    if (sensorSetting.contains(parent.getKey()) && sensorInfo.getBoolean("value")) {
+                        return true;
                     }
                 }
-
-                // Check if any of the status settings of a sensor (parent pref) is active in the study config
-                JSONObject studyConfig = Aware.getStudyConfig(getApplicationContext(), Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER));
-                boolean isActiveInConfig = false;
-                try {
-                    JSONArray sensorsList = studyConfig.getJSONArray("sensors");
-                    for (int i = 0; i < sensorsList.length(); i++) {
-                        JSONObject sensorInfo = sensorsList.getJSONObject(i);
-                        String sensorSetting = sensorInfo.getString("setting");
-
-                        if (sensorStatuses.contains(sensorSetting)) {
-                            sensorStatuses.remove(sensorSetting);
-                            isActiveInConfig = sensorInfo.getBoolean("value");
-                        }
-
-                        if (isActiveInConfig || sensorStatuses.size() == 0) break;
-                    }
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-
-                // Only show sensor if it is active in the study config
-                if (isActiveInConfig) {
-                    if (pref != null) Log.i(TAG, "Pref with key: " + pref.getKey() + " is active!");
-                    try {
-                        Class res = R.drawable.class;
-                        Field field = res.getField("ic_action_" + parent.getKey());
-                        int icon_id = field.getInt(null);
-                        Drawable category_icon = ContextCompat.getDrawable(getApplicationContext(), icon_id);
-                        if (category_icon != null) {
-                            int colorId = isActive ? R.color.accent : R.color.lightGray;
-                            category_icon.setColorFilter(new PorterDuffColorFilter(ContextCompat.getColor(getApplicationContext(), colorId), PorterDuff.Mode.SRC_IN));
-                            parent.setIcon(category_icon);
-                            onContentChanged();
-                        }
-                    } catch (NoSuchFieldException | IllegalAccessException e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    PreferenceCategory rootSensorPref = (PreferenceCategory) getPreferenceParent(parent);
-                    rootSensorPref.removePreference(parent);
-                }
+            } catch (JSONException e) {
+                e.printStackTrace();
             }
+            return false;
+        }
+
+        private void updatePreferenceIcon(PreferenceScreen parent, boolean isActive) {
+            try {
+                int iconId = R.drawable.class.getField("ic_action_" + parent.getKey()).getInt(null);
+                Drawable categoryIcon = ContextCompat.getDrawable(getApplicationContext(), iconId);
+                if (categoryIcon != null) {
+                    int colorId = isActive ? R.color.accent : R.color.lightGray;
+                    categoryIcon.setColorFilter(new PorterDuffColorFilter(ContextCompat.getColor(getApplicationContext(), colorId), PorterDuff.Mode.SRC_IN));
+                    parent.setIcon(categoryIcon);
+                    onContentChanged();
+                }
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void removeInactivePreference(PreferenceScreen parent) {
+            PreferenceCategory rootSensorPref = (PreferenceCategory) getPreferenceParent(parent);
+            rootSensorPref.removePreference(parent);
         }
     }
 
@@ -801,7 +832,9 @@ public class Aware_Light_Client extends Aware_Activity {
                     findPreference(Aware_Preferences.WEBSERVICE_REMOVE_DATA),
                     findPreference(Aware_Preferences.DEBUG_DB_SLOW),
                     findPreference(Aware_Preferences.FOREGROUND_PRIORITY),
-                    findPreference(Aware_Preferences.STATUS_TOUCH)
+                    findPreference(Aware_Preferences.STATUS_TOUCH),
+                    findPreference(Aware_Preferences.STATUS_SCREENSHOT)
+
             );
         }
     }
