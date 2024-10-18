@@ -355,20 +355,20 @@ public class Scheduler extends Aware_Sensor {
                 timer.setTimeInMillis(r);
 
                 Log.d(TAG, "RANDOM TIME:" + timer.getTime().toString() + "\n");
-
-                schedule.setTimer(timer);
+                Schedule newSchedule = new Schedule(schedule);
+                newSchedule.setTimer(timer);
 
                 if (r == max) {
-                    schedule.setScheduleID(original_id + "_random_" + r + "_last");
+                    newSchedule.setScheduleID(original_id + "_random_" + r + "_last");
                 } else {
-                    schedule.setScheduleID(original_id + "_random_" + r);
+                    newSchedule.setScheduleID(original_id + "_random_" + r);
                 }
 
                 ContentValues data = new ContentValues();
                 data.put(Scheduler_Provider.Scheduler_Data.TIMESTAMP, System.currentTimeMillis());
                 data.put(Scheduler_Provider.Scheduler_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
-                data.put(Scheduler_Provider.Scheduler_Data.SCHEDULE_ID, schedule.getScheduleID());
-                data.put(Scheduler_Provider.Scheduler_Data.SCHEDULE, schedule.build().toString());
+                data.put(Scheduler_Provider.Scheduler_Data.SCHEDULE_ID, newSchedule.getScheduleID());
+                data.put(Scheduler_Provider.Scheduler_Data.SCHEDULE, newSchedule.build().toString());
                 data.put(Scheduler_Provider.Scheduler_Data.PACKAGE_NAME, context.getPackageName());
 
                 Log.d(Scheduler.TAG, "Random schedule: " + data.toString() + "\n");
@@ -1090,7 +1090,7 @@ public class Scheduler extends Aware_Sensor {
             sendBroadcast(scheduler_action);
 
             Aware.debug(this, "Scheduler triggered: " + schedule.getScheduleID() + " schedule: " + schedule.build().toString() + " package: " + getPackageName());
-
+            Log.d(TAG, "Scheduler triggered: " + schedule.getScheduleID() + " schedule: " + schedule.build().toString() + " package: " + getPackageName());
             if (schedule.getActionType().equals(ACTION_TYPE_BROADCAST)) {
                 Intent broadcast = new Intent(schedule.getActionIntentAction());
                 JSONArray extras = schedule.getActionExtras();
@@ -1185,11 +1185,14 @@ public class Scheduler extends Aware_Sensor {
                 if (schedule.getRandom().length() > 0 && schedule.getScheduleID().contains("_last") && schedule.getScheduleID().contains("_random_")) {
 
                     //clean-up random strings
+                    String lastScheduleID = schedule.getScheduleID();
                     String originalScheduleID = schedule.getScheduleID().substring(0, schedule.getScheduleID().indexOf("_random_"));
+                    Log.d(TAG, originalScheduleID + " is this");
                     schedule.setScheduleID(originalScheduleID);
 
                     //recreate random scheduler for tomorrow
                     Scheduler.rescheduleRandom(getApplicationContext(), schedule);
+                    schedule.setScheduleID(lastScheduleID);
                 }
             }
 
@@ -1232,6 +1235,17 @@ public class Scheduler extends Aware_Sensor {
             } catch (JSONException e) {
                 e.printStackTrace();
             }
+        }
+
+        public Schedule(Schedule schedule) {
+            try{
+                this.schedule = new JSONObject(schedule.schedule.toString());
+                this.trigger = new JSONObject(schedule.trigger.toString());
+                this.action = new JSONObject(schedule.action.toString());
+            }
+            catch (JSONException e){
+                e.printStackTrace();
+            }// Deep copy
         }
 
         public Schedule(JSONObject schedule) {
@@ -1603,6 +1617,7 @@ public class Scheduler extends Aware_Sensor {
          * @throws JSONException
          */
         public Schedule random(int daily_amount, int minimum_interval) throws JSONException {
+            Log.i("TEST", "random did work");
             JSONObject json_random = getRandom();
             json_random.put(RANDOM_TIMES, daily_amount);
             json_random.put(RANDOM_INTERVAL, minimum_interval);
