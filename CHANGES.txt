@@ -1,4 +1,7 @@
 Change log for AWARE-Light
+4.5.4.beta
+- Fix logic of reschedule next day random esm trigger, avoid repeat appear of esm notification
+
 4.5.3.beta
 - Fix the ESM queue logic to ensure that the correct number of questions are displayed according to the configurator settings.
 
