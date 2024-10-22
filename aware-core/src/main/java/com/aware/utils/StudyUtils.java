@@ -424,6 +424,7 @@ public class StudyUtils extends IntentService {
         try {
             String type = scheduleJson.getString("type");
             String title = scheduleJson.getString("title");
+            String keep = scheduleJson.getString("esm_keep");
             Scheduler.Schedule schedule = new Scheduler.Schedule(title);
 
             if (Aware.DEBUG) Log.d(Aware.TAG, "Creating ESM schedule: " + scheduleJson.toString());
@@ -462,6 +463,7 @@ public class StudyUtils extends IntentService {
             // Set trigger for ESMs as the schedule's title
             for (int i = 0; i < esmsArray.length(); i ++) {
                 esmsArray.getJSONObject(i).getJSONObject("esm").put(ESM_Question.esm_trigger, title);
+                esmsArray.getJSONObject(i).getJSONObject("esm").put(ESM_Question.esm_keep, keep);
             }
 
             schedule.setActionType(Scheduler.ACTION_TYPE_BROADCAST)

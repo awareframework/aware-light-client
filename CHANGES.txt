@@ -1,4 +1,7 @@
 Change log for AWARE-Light
+4.5.3.beta
+- Fix the ESM queue logic to ensure that the correct number of questions are displayed according to the configurator settings.
+
 4.5.2.beta
 - Screenshot sensor can capture application name for foreground app.
 

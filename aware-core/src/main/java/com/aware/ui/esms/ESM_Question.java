@@ -45,6 +45,7 @@ public class ESM_Question extends DialogFragment {
     public static final String flow_user_answer = "user_answer";
     public static final String flow_next_esm = "next_esm";
     public static final String esm_app_integration = "esm_app_integration";
+    public static final String esm_keep = "esm_keep";
 
     protected ESM_Question setID(int id) {
         _id = id;
