@@ -130,7 +130,6 @@ public class ESM_Checkbox extends ESM_Question {
                                             final EditText otherText = new EditText(getActivity());
                                             otherText.setHint(getResources().getString(R.string.aware_esm_other_follow));
                                             editor.addView(otherText);
-                                            otherText.requestFocus();
                                             editOther.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
 
                                             Button confirm = new Button(getActivity());
