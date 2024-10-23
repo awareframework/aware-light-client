@@ -1,4 +1,10 @@
 Change log for AWARE-Light
+4.1.6
+- A crash that occurred when enabling accessibility before starting a study has been fixed.
+- The screen text sensor now correctly collects duplicate text when the foreground app changes, ensuring that screen text is captured during app switches, home screen access, and notification checks.
+- Fix display issues: long question titles can be displayed completely.
+- Fix the ESM queue logic to ensure that the correct number of questions are displayed according to the configurator settings.
+- Fix logic of reschedule next day random esm trigger, avoid repeat appear of esm notification.
 
 4.1.5.light.bundle
 - Logging if the application is terminated by user actions or system actions to aware_log table
