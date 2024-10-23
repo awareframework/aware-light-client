@@ -1,5 +1,5 @@
 Change log for AWARE-Light
-4.1.6
+4.1.6.light.bundle
 - A crash that occurred when enabling accessibility before starting a study has been fixed.
 - The screen text sensor now correctly collects duplicate text when the foreground app changes, ensuring that screen text is captured during app switches, home screen access, and notification checks.
 - Fix display issues: long question titles can be displayed completely.
