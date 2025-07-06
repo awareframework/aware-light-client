@@ -1,6 +1,7 @@
 package com.aware;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -13,6 +14,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SyncRequest;
+import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
@@ -57,19 +59,18 @@ public class ScreenShot extends Aware_Sensor {
     public static final String ACTION_SCREENSHOT_STATUS = "com.aware.ACTION_SCREENSHOT_STATUS";
     public static final String EXTRA_SCREENSHOT_STATUS = "extra_screenshot_status";
     public static final String STATUS_RETRY_COUNT_EXCEEDED = "status_retry_count_exceeded";
+    public static final String STATUS_SESSION_EXPIRED = "status_session_expired";
 
     public static int mediaProjectionResultCode;
     public static Intent mediaProjectionResultData;
 
     private MediaProjection mediaProjection;
     private VirtualDisplay virtualDisplay;
-    private WindowManager windowManager;
     private ImageReader imageReader;
     private Handler handler;
     private HandlerThread handlerThread;
     private int width;
     private int height;
-    private int density;
     private boolean isScreenOff = false;
     private long lastCaptureTime = 0;
     private int capture_delay = 3000;
@@ -115,6 +116,11 @@ public class ScreenShot extends Aware_Sensor {
 
         REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         REQUIRED_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+        
+        // Add notification permission for Android 13+
+        if (Build.VERSION.SDK_INT >= 33) {
+            REQUIRED_PERMISSIONS.add("android.permission.POST_NOTIFICATIONS");
+        }
 
         createNotificationChannel();
         registerScreenStateReceiver();
@@ -175,13 +181,17 @@ public class ScreenShot extends Aware_Sensor {
             NotificationChannel channel = new NotificationChannel(
                     NOTIFICATION_CHANNEL_ID,
                     "Screen Capture",
-                    NotificationManager.IMPORTANCE_DEFAULT
+                    NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Channel for screen capture");
+            channel.setDescription("Shows when screen capture is active");
+            channel.setShowBadge(false);
+            channel.setSound(null, null);
+            channel.enableVibration(false);
 
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(channel);
+                Log.d(TAG, "Notification channel created: " + NOTIFICATION_CHANNEL_ID);
             }
         }
     }
@@ -189,6 +199,7 @@ public class ScreenShot extends Aware_Sensor {
     /**
      * Registers a broadcast receiver to listen for screen on/off events and data sync actions.
      */
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private void registerScreenStateReceiver() {
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_SCREEN_OFF);
@@ -208,29 +219,34 @@ public class ScreenShot extends Aware_Sensor {
     private void startForegroundService(int resultCode, Intent data) {
         Intent stopSelf = new Intent(this, ScreenShot.class);
         stopSelf.setAction(ACTION_STOP_CAPTURE);
-        PendingIntent pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT);
+        PendingIntent pStopSelf;
+        pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         Notification notification = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-                .setContentTitle("Screen Capture")
-                .setContentText("Capturing screen every " + (capture_delay / 1000) + " seconds...")
+                .setContentTitle("Screen Capture Active")
+                .setContentText("Capturing screen every " + (capture_delay / 1000) + " seconds")
                 .setSmallIcon(R.drawable.ic_stat_deny)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setOngoing(true)
+                .setShowWhen(false)
                 .addAction(R.drawable.ic_stat_deny, "Stop Capture", pStopSelf)
                 .build();
 
+        // For Android Q and above, we should specify the foreground service type
+        // but the 3-parameter startForeground is only available in API 29+
         startForeground(NOTIFICATION_ID, notification);
-        Log.d(TAG, "Foreground service started");
+        Log.d(TAG, "Foreground service started with notification");
 
         MediaProjectionManager mediaProjectionManager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
         mediaProjection = mediaProjectionManager.getMediaProjection(resultCode, data);
 
-        windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+        WindowManager windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         DisplayMetrics metrics = new DisplayMetrics();
         windowManager.getDefaultDisplay().getMetrics(metrics);
 
         width = metrics.widthPixels;
         height = metrics.heightPixels;
-        density = metrics.densityDpi;
+        int density = metrics.densityDpi;
 
         imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
 
@@ -270,6 +286,13 @@ public class ScreenShot extends Aware_Sensor {
         @Override
         public void run() {
             if (!isScreenOff) {
+                // Validate MediaProjection session is still valid
+                if (!isMediaProjectionValid()) {
+                    Log.e(TAG, "MediaProjection session invalid, sending session expired broadcast");
+                    sendSessionExpiredBroadcast();
+                    return;
+                }
+                
                 long currentTime = System.currentTimeMillis();
                 if (currentTime - lastCaptureTime >= capture_delay || retryCount > 0) {
                     Image image = imageReader.acquireLatestImage();
@@ -303,6 +326,35 @@ public class ScreenShot extends Aware_Sensor {
         Intent intent = new Intent(ACTION_SCREENSHOT_STATUS);
         intent.putExtra(EXTRA_SCREENSHOT_STATUS, STATUS_RETRY_COUNT_EXCEEDED);
         sendBroadcast(intent);
+    }
+    
+    /**
+     * Sends a broadcast indicating that the MediaProjection session has expired.
+     */
+    private void sendSessionExpiredBroadcast() {
+        Intent intent = new Intent(ACTION_SCREENSHOT_STATUS);
+        intent.putExtra(EXTRA_SCREENSHOT_STATUS, STATUS_SESSION_EXPIRED);
+        sendBroadcast(intent);
+    }
+    
+    /**
+     * Checks if the MediaProjection session is still valid.
+     * @return true if valid, false otherwise
+     */
+    private boolean isMediaProjectionValid() {
+        try {
+            if (mediaProjection == null || virtualDisplay == null || imageReader == null) {
+                return false;
+            }
+            // Try to get the surface to check if the virtual display is still valid
+            if (virtualDisplay.getSurface() == null) {
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "Error checking MediaProjection validity: " + e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -529,7 +581,7 @@ public class ScreenShot extends Aware_Sensor {
 
         if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
             try {
-                if (screenStateReceiver != null) unregisterReceiver(screenStateReceiver);
+                unregisterReceiver(screenStateReceiver);
             } catch (IllegalArgumentException e) {
                 Log.d(TAG, "Screenshot service unbind...");
             }
