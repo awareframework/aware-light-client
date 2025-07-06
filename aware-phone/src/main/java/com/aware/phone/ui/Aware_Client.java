@@ -99,6 +99,12 @@ public class Aware_Client extends Aware_Activity {
     private static final Hashtable<String, Integer> optionalSensors = new Hashtable<>();
     private final Aware.AndroidPackageMonitor packageMonitor = new Aware.AndroidPackageMonitor();
     private TakeNotesPref originalTakeNotesPref = null;
+    
+    // Screenshot service restart tracking
+    private int screenshotRestartCount = 0;
+    private long lastScreenshotRestartTime = 0;
+    private static final int MAX_SCREENSHOT_RESTART_ATTEMPTS = 3;
+    private static final long SCREENSHOT_RESTART_RESET_INTERVAL = 60000; // 1 minute
 
     private BroadcastReceiver screenshotServiceStoppedReceiver = new BroadcastReceiver() {
         @Override
@@ -489,26 +495,63 @@ public class Aware_Client extends Aware_Activity {
                 if (ScreenShot.STATUS_RETRY_COUNT_EXCEEDED.equals(status)) {
                     Log.d(TAG, "Screenshot service retry count exceeded. Restarting service...");
                     restartScreenshotService();
+                } else if (ScreenShot.STATUS_SESSION_EXPIRED.equals(status)) {
+                    Log.d(TAG, "Screenshot MediaProjection session expired. Requesting new permission...");
+                    handleSessionExpired();
                 }
             }
         }
     };
 
     private void restartScreenshotService() {
+        long currentTime = System.currentTimeMillis();
+        
+        // Reset restart count if enough time has passed
+        if (currentTime - lastScreenshotRestartTime > SCREENSHOT_RESTART_RESET_INTERVAL) {
+            screenshotRestartCount = 0;
+        }
+        
+        screenshotRestartCount++;
+        lastScreenshotRestartTime = currentTime;
+        
+        if (screenshotRestartCount > MAX_SCREENSHOT_RESTART_ATTEMPTS) {
+            Log.e(TAG, "Screenshot service exceeded maximum restart attempts");
+            showScreenshotServiceError("Screenshot service is experiencing issues. Please check your settings and permissions.");
+            // Reset the counter to allow future restarts
+            screenshotRestartCount = 0;
+            return;
+        }
+        
         stopScreenshotService();
-        // Optionally wait for a few seconds before restarting the service to avoid rapid restarts
+        
+        // Exponential backoff: 2s, 4s, 8s
+        long restartDelay = (long) (2000 * Math.pow(2, screenshotRestartCount - 1));
+        Log.d(TAG, "Restarting screenshot service in " + restartDelay + "ms (attempt " + screenshotRestartCount + ")");
+        
         new Handler().postDelayed(new Runnable() {
             @Override
             public void run() {
                 checkAndStartScreenshotService();
             }
-        }, 2000); // Wait for 2 seconds before restarting
+        }, restartDelay);
     }
 
     private void checkAndStartScreenshotService() {
         if (!isAccessibilityServiceEnabled(this, Applications.class)) {
             enableAccessibilityService();
             return;
+        }
+        
+        // Check storage permissions before starting screenshot service
+        if (!checkScreenshotPermissions()) {
+            Log.e(TAG, "Missing required permissions for screenshot service");
+            showScreenshotServiceError("Screenshot service requires storage permissions. Please grant them in settings.");
+            return;
+        }
+        
+        // Check battery optimization
+        if (!isBatteryOptimizationIgnored(this, getPackageName())) {
+            Log.w(TAG, "Battery optimization not ignored - screenshot service may be killed");
         }
 
         if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
@@ -589,6 +632,13 @@ public class Aware_Client extends Aware_Activity {
         if (!saveToLocalSetting.isEmpty()) {
             saveToLocal = Boolean.parseBoolean(saveToLocalSetting);
         }
+        
+        // Log service configuration for debugging
+        Log.d(TAG, "Starting screenshot service with configuration:");
+        Log.d(TAG, "  Capture interval: " + captureInterval + " seconds");
+        Log.d(TAG, "  Compression rate: " + compressRate + "%");
+        Log.d(TAG, "  Save to local: " + saveToLocal);
+        Log.d(TAG, "  Battery optimization ignored: " + isBatteryOptimizationIgnored(this, getPackageName()));
 
         Intent serviceIntent = new Intent(this, ScreenShot.class);
         serviceIntent.putExtra(ScreenShot.MEDIA_PROJECTION_RESULT_CODE, resultCode);
@@ -596,13 +646,32 @@ public class Aware_Client extends Aware_Activity {
         serviceIntent.putExtra(ScreenShot.CAPTURE_TIME_INTERVAL, captureInterval * 1000); // Convert to milliseconds
         serviceIntent.putExtra(ScreenShot.COMPRESS_RATE, compressRate);
         serviceIntent.putExtra(ScreenShot.STATUS_SCREENSHOT_LOCAL_STORAGE, saveToLocal);
-        ContextCompat.startForegroundService(this, serviceIntent);
+        
+        try {
+            ContextCompat.startForegroundService(this, serviceIntent);
+            
+            // Store the start time for health monitoring
+            prefs.edit().putLong("screenshot_service_start_time", System.currentTimeMillis()).apply();
+            
+            Toast.makeText(this, "Screenshot service started", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to start screenshot service", e);
+            showScreenshotServiceError("Failed to start screenshot service: " + e.getMessage());
+        }
     }
 
 
     private void stopScreenshotService() {
         Intent serviceIntent = new Intent(this, ScreenShot.class);
         stopService(serviceIntent);
+        
+        // Track service stop time for health monitoring
+        long startTime = prefs.getLong("screenshot_service_start_time", 0);
+        if (startTime > 0) {
+            long runDuration = System.currentTimeMillis() - startTime;
+            Log.d(TAG, "Screenshot service ran for " + (runDuration / 1000) + " seconds");
+            prefs.edit().remove("screenshot_service_start_time").apply();
+        }
     }
 
     /**
@@ -742,6 +811,8 @@ public class Aware_Client extends Aware_Activity {
 
             if (resultCode == RESULT_OK) {
                 startScreenshotService(resultCode, data);
+                // Reset restart count on successful permission grant
+                screenshotRestartCount = 0;
             } else {
                 Toast.makeText(this, "Screen capture permission denied", Toast.LENGTH_SHORT).show();
             }
@@ -1127,7 +1198,19 @@ public class Aware_Client extends Aware_Activity {
                         String sensorSetting = sensorConfig.getString("setting");
                         
                         // Only add permissions for enabled sensors
-                        if (sensorConfig.getBoolean("value")) {
+                        // Check if sensor is enabled - value can be boolean, string, or numeric
+                        boolean isEnabled = false;
+                        Object value = sensorConfig.get("value");
+                        if (value instanceof Boolean) {
+                            isEnabled = (Boolean) value;
+                        } else if (value instanceof String) {
+                            isEnabled = "true".equalsIgnoreCase((String) value) || !"".equals(value);
+                        } else if (value instanceof Number) {
+                            // If it's a number (frequency), consider it enabled if > 0
+                            isEnabled = ((Number) value).intValue() > 0;
+                        }
+                        
+                        if (isEnabled) {
                             List<String> sensorPermissions = SensorPermissionMapper.getRequiredPermissions(sensorSetting);
                             uniquePermissions.addAll(sensorPermissions);
                         }
@@ -1177,6 +1260,78 @@ public class Aware_Client extends Aware_Activity {
     /**
      * Show a dialog explaining why a specific sensor needs permissions
      */
+    private void handleSessionExpired() {
+        // Clear the stored MediaProjection data
+        ScreenShot.mediaProjectionResultCode = 0;
+        ScreenShot.mediaProjectionResultData = null;
+        
+        // Reset restart count for session expiry
+        screenshotRestartCount = 0;
+        
+        // Request new MediaProjection permission
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(Aware_Client.this, 
+                    "Screenshot permission expired. Please grant permission again.", 
+                    Toast.LENGTH_LONG).show();
+                
+                // Request new permission after a short delay
+                new Handler().postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT).equals("true")) {
+                            MediaProjectionManager projectionManager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+                            Intent intent = projectionManager.createScreenCaptureIntent();
+                            startActivityForResult(intent, REQUEST_CODE_SCREENSHOT);
+                        }
+                    }
+                }, 1000);
+            }
+        });
+    }
+    
+    private boolean checkScreenshotPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return PermissionChecker.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PermissionChecker.PERMISSION_GRANTED &&
+                   PermissionChecker.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PermissionChecker.PERMISSION_GRANTED;
+        }
+        return true;
+    }
+    
+    private void showScreenshotServiceError(final String message) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                new AlertDialog.Builder(Aware_Client.this)
+                    .setTitle("Screenshot Service Error")
+                    .setMessage(message)
+                    .setPositiveButton("Settings", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            // Open app settings
+                            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                            Uri uri = Uri.fromParts("package", getPackageName(), null);
+                            intent.setData(uri);
+                            startActivity(intent);
+                        }
+                    })
+                    .setNegativeButton("Disable", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            // Disable screenshot service
+                            Aware.setSetting(getApplicationContext(), Aware_Preferences.STATUS_SCREENSHOT, false);
+                            CheckBoxPreference screenshotPref = (CheckBoxPreference) findPreference(Aware_Preferences.STATUS_SCREENSHOT);
+                            if (screenshotPref != null) {
+                                screenshotPref.setChecked(false);
+                            }
+                        }
+                    })
+                    .show();
+            }
+        });
+    }
+    
     private void showSensorPermissionDialog(final String sensorKey, final ArrayList<String> missingPermissions) {
         final String sensorName = AwareUtil.getSensorType(sensorKey);
         

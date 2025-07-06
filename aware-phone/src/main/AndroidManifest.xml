@@ -30,21 +30,6 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".Aware_Client"
-            android:configChanges="keyboardHidden|orientation|screenSize"
-            android:exported="true"
-            android:icon="@drawable/ic_launcher_aware"
-            android:label="AWARE"
-            android:launchMode="singleTop"
-            android:theme="@style/Theme.Aware">
-<!--            <intent-filter>-->
-<!--                <action android:name="android.intent.action.MAIN" />-->
-
-<!--                <category android:name="android.intent.category.DEFAULT" />-->
-<!--                <category android:name="android.intent.category.LAUNCHER" />-->
-<!--            </intent-filter>-->
-        </activity>
-        <activity
             android:name=".ui.Stream_UI"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:icon="@mipmap/ic_launcher_stream"
