@@ -165,6 +165,12 @@ public class QuitStudyDialog extends DialogFragment {
             // Stop the screenshot service
             stopScreenshotService();
 
+            // Reset the permission shown flag so permissions will be requested for next study
+            mActivity.getSharedPreferences("com.aware.phone", Activity.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("study_permissions_shown", false)
+                    .apply();
+
             // Reset Aware settings
             Aware.reset(mActivity);
             return null;

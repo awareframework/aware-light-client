@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Summary section -->
+    <TextView
+        android:id="@+id/permission_summary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Loading sensor permissions..."
+        android:textSize="14sp"
+        android:textColor="@android:color/black"
+        android:paddingBottom="16dp" />
+
+    <!-- Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@android:color/darker_gray"
+        android:layout_marginBottom="8dp" />
+
+    <!-- List of sensors and their permissions -->
+    <ListView
+        android:id="@+id/permission_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="@android:color/transparent"
+        android:dividerHeight="8dp"
+        android:scrollbars="vertical"
+        android:fadeScrollbars="false"
+        android:minHeight="200dp"
+        android:maxHeight="400dp" />
+
+    <!-- Request permissions button -->
+    <Button
+        android:id="@+id/btn_request_permissions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Request Missing Permissions"
+        android:textColor="@android:color/white"
+        android:background="@color/accent" />
+
+</LinearLayout>

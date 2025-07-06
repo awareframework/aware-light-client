@@ -23,6 +23,7 @@ import com.aware.Aware;
 import com.aware.Aware_Preferences;
 import com.aware.phone.R;
 import com.aware.phone.ui.dialogs.JoinStudyDialog;
+import com.aware.phone.ui.dialogs.PermissionCheckDialog;
 import com.aware.phone.utils.AwareUtil;
 import com.aware.providers.Aware_Provider;
 import com.aware.utils.*;
@@ -164,16 +165,30 @@ public class Aware_Join_Study extends Aware_Activity {
                 btnAction.setEnabled(false);
                 btnAction.setAlpha(0.5f);
 
-                Cursor study = Aware.getStudy(getApplicationContext(), study_url);
-                if (study != null && study.moveToFirst()) {
-                    ContentValues studyData = new ContentValues();
-                    studyData.put(Aware_Provider.Aware_Studies.STUDY_JOINED, System.currentTimeMillis());
-                    studyData.put(Aware_Provider.Aware_Studies.STUDY_EXIT, 0);
-                    getContentResolver().update(Aware_Provider.Aware_Studies.CONTENT_URI, studyData, Aware_Provider.Aware_Studies.STUDY_URL + " LIKE '" + study_url + "'", null);
-                }
-                if (study != null && !study.isClosed()) study.close();
+                // Reset permission shown flag when joining a new study
+                getSharedPreferences("com.aware.phone", MODE_PRIVATE)
+                        .edit()
+                        .putBoolean("study_permissions_shown", false)
+                        .apply();
+                
+                // Show permission check dialog before joining the study
+                PermissionCheckDialog permissionDialog = new PermissionCheckDialog(Aware_Join_Study.this);
+                permissionDialog.showPermissionCheck(study_configs, new Runnable() {
+                    @Override
+                    public void run() {
+                        // Continue with joining the study after permission check
+                        Cursor study = Aware.getStudy(getApplicationContext(), study_url);
+                        if (study != null && study.moveToFirst()) {
+                            ContentValues studyData = new ContentValues();
+                            studyData.put(Aware_Provider.Aware_Studies.STUDY_JOINED, System.currentTimeMillis());
+                            studyData.put(Aware_Provider.Aware_Studies.STUDY_EXIT, 0);
+                            getContentResolver().update(Aware_Provider.Aware_Studies.CONTENT_URI, studyData, Aware_Provider.Aware_Studies.STUDY_URL + " LIKE '" + study_url + "'", null);
+                        }
+                        if (study != null && !study.isClosed()) study.close();
 
-                new JoinStudyAsync().execute();
+                        new JoinStudyAsync().execute();
+                    }
+                });
             }
         });
 

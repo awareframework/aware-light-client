@@ -819,6 +819,10 @@
             android:key="study_info_pref" />
         <com.aware.phone.ui.prefs.TakeNotesPref
             android:key="take_notes_pref"/>
+        <Preference
+            android:key="check_permissions"
+            android:title="Check Permissions"
+            android:summary="View and request permissions for enabled sensors" />
         <com.aware.phone.ui.prefs.StudySyncPref
             android:key="study_sync_pref" />
         <com.aware.phone.ui.prefs.ExportDataPref

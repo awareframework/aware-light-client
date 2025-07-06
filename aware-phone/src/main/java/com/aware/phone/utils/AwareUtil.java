@@ -89,8 +89,82 @@ public class AwareUtil {
      * @return
      */
     public static String getSensorType(String setting) {
-        // TODO: Get a proper mapping
-        return setting.replace("status_", "");
+        // Map sensor settings to user-friendly names
+        switch (setting) {
+            case Aware_Preferences.STATUS_ACCELEROMETER:
+                return "Accelerometer";
+            case Aware_Preferences.STATUS_GYROSCOPE:
+                return "Gyroscope";
+            case Aware_Preferences.STATUS_MAGNETOMETER:
+                return "Magnetometer";
+            case Aware_Preferences.STATUS_BAROMETER:
+                return "Barometer";
+            case Aware_Preferences.STATUS_GRAVITY:
+                return "Gravity Sensor";
+            case Aware_Preferences.STATUS_LINEAR_ACCELEROMETER:
+                return "Linear Accelerometer";
+            case Aware_Preferences.STATUS_ROTATION:
+                return "Rotation Sensor";
+            case Aware_Preferences.STATUS_LIGHT:
+                return "Light Sensor";
+            case Aware_Preferences.STATUS_PROXIMITY:
+                return "Proximity Sensor";
+            case Aware_Preferences.STATUS_TEMPERATURE:
+                return "Temperature Sensor";
+            case Aware_Preferences.STATUS_LOCATION_GPS:
+                return "GPS Location";
+            case Aware_Preferences.STATUS_LOCATION_NETWORK:
+                return "Network Location";
+            case Aware_Preferences.STATUS_LOCATION_PASSIVE:
+                return "Passive Location";
+            case Aware_Preferences.STATUS_CALLS:
+                return "Phone Calls";
+            case Aware_Preferences.STATUS_MESSAGES:
+                return "Messages";
+            case Aware_Preferences.STATUS_TELEPHONY:
+                return "Telephony";
+            case Aware_Preferences.STATUS_WIFI:
+                return "WiFi";
+            case Aware_Preferences.STATUS_BLUETOOTH:
+                return "Bluetooth";
+            case Aware_Preferences.STATUS_APPLICATIONS:
+                return "Applications";
+            case Aware_Preferences.STATUS_KEYBOARD:
+                return "Keyboard";
+            case Aware_Preferences.STATUS_NOTIFICATIONS:
+                return "Notifications";
+            case Aware_Preferences.STATUS_SCREENTEXT:
+                return "Screen Text";
+            case Aware_Preferences.STATUS_TOUCH:
+                return "Touch Events";
+            case Aware_Preferences.STATUS_BATTERY:
+                return "Battery";
+            case Aware_Preferences.STATUS_SCREEN:
+                return "Screen";
+            case Aware_Preferences.STATUS_NETWORK_EVENTS:
+                return "Network Events";
+            case Aware_Preferences.STATUS_NETWORK_TRAFFIC:
+                return "Network Traffic";
+            case Aware_Preferences.STATUS_PROCESSOR:
+                return "Processor";
+            case Aware_Preferences.STATUS_TIMEZONE:
+                return "Timezone";
+            case Aware_Preferences.STATUS_SIGNIFICANT_MOTION:
+                return "Significant Motion";
+            case Aware_Preferences.STATUS_SCREENSHOT:
+                return "Screenshot";
+            case Aware_Preferences.STATUS_ESM:
+                return "Experience Sampling";
+            case Aware_Preferences.STATUS_PLUGIN_AMBIENT_NOISE:
+                return "Ambient Noise";
+            case Aware_Preferences.STATUS_PLUGIN_OPENWEATHER:
+                return "Weather";
+            default:
+                // Fallback to simple formatting
+                return setting.replace("status_", "").replace("_", " ")
+                        .substring(0, 1).toUpperCase() + 
+                        setting.replace("status_", "").replace("_", " ").substring(1);
+        }
     }
 
 //    public static void syncStudyConfig(Context context) {

@@ -2,6 +2,7 @@ package com.aware.phone.ui;
 
 import android.Manifest;
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -46,6 +47,9 @@ import com.aware.Aware_Preferences;
 import com.aware.Notes;
 import com.aware.phone.R;
 import com.aware.phone.ui.prefs.TakeNotesPref;
+import com.aware.phone.ui.dialogs.PermissionCheckDialog;
+import com.aware.phone.utils.AwareUtil;
+import com.aware.phone.utils.SensorPermissionMapper;
 import com.aware.ui.PermissionsHandler;
 import com.aware.ScreenShot;
 
@@ -56,6 +60,7 @@ import org.json.JSONObject;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Hashtable;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -156,33 +161,32 @@ public class Aware_Client extends Aware_Activity {
             listSensorType.put(sensors.get(i).getType(), true);
         }
 
-        REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_WIFI_STATE);
-
-//        REQUIRED_PERMISSIONS.add(Manifest.permission.CAMERA);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.BLUETOOTH);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.BLUETOOTH_ADMIN);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.READ_PHONE_STATE);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.GET_ACCOUNTS);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_SYNC_SETTINGS);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.READ_SYNC_SETTINGS);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.READ_SYNC_STATS);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+        // Core permissions that are always needed for basic functionality
         REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         REQUIRED_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+        REQUIRED_PERMISSIONS.add(Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+        
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            REQUIRED_PERMISSIONS.add(Manifest.permission.FOREGROUND_SERVICE);
+        }
 
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) REQUIRED_PERMISSIONS.add(Manifest.permission.FOREGROUND_SERVICE);
-
-        boolean PERMISSIONS_OK = true;
-        for (String p : REQUIRED_PERMISSIONS) {
+        // Check only core permissions needed to start AWARE service
+        boolean CORE_PERMISSIONS_OK = true;
+        ArrayList<String> corePermissions = new ArrayList<>();
+        corePermissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        corePermissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            corePermissions.add(Manifest.permission.FOREGROUND_SERVICE);
+        }
+        
+        for (String p : corePermissions) {
             if (PermissionChecker.checkSelfPermission(this, p) != PermissionChecker.PERMISSION_GRANTED) {
-                PERMISSIONS_OK = false;
+                CORE_PERMISSIONS_OK = false;
                 break;
             }
         }
-        if (PERMISSIONS_OK) {
+        
+        if (CORE_PERMISSIONS_OK) {
             Intent aware = new Intent(this, Aware.class);
             startService(aware);
         }
@@ -249,6 +253,23 @@ public class Aware_Client extends Aware_Activity {
                 }
             });
         }
+        
+        // Handle check permissions preference click
+        if (preference.getKey() != null && preference.getKey().equals("check_permissions")) {
+            // Get current study config
+            JSONObject studyConfig = Aware.getStudyConfig(getApplicationContext(), 
+                Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER));
+            
+            if (studyConfig != null) {
+                JSONArray studyConfigs = new JSONArray().put(studyConfig);
+                PermissionCheckDialog permissionDialog = new PermissionCheckDialog(this);
+                permissionDialog.showPermissionCheck(studyConfigs, null);
+            } else {
+                Toast.makeText(this, "No study configuration found", Toast.LENGTH_SHORT).show();
+            }
+            return true;
+        }
+        
         return super.onPreferenceTreeClick(preferenceScreen, preference);
     }
 
@@ -271,6 +292,28 @@ public class Aware_Client extends Aware_Activity {
         if (CheckBoxPreference.class.isInstance(pref)) {
             CheckBoxPreference check = (CheckBoxPreference) findPreference(key);
             check.setChecked(Aware.getSetting(getApplicationContext(), key).equals("true"));
+
+            // Check if this is a sensor being enabled that needs permissions
+            if (key.contains("status_") && value.equals("true")) {
+                List<String> sensorPermissions = SensorPermissionMapper.getRequiredPermissions(key);
+                ArrayList<String> missingPermissions = new ArrayList<>();
+                
+                for (String permission : sensorPermissions) {
+                    if (PermissionChecker.checkSelfPermission(this, permission) != PermissionChecker.PERMISSION_GRANTED) {
+                        missingPermissions.add(permission);
+                    }
+                }
+                
+                if (!missingPermissions.isEmpty()) {
+                    // Sensor needs permissions - disable it temporarily and show permission dialog
+                    check.setChecked(false);
+                    Aware.setSetting(getApplicationContext(), key, "false");
+                    
+                    // Show permission dialog for this specific sensor
+                    showSensorPermissionDialog(key, missingPermissions);
+                    return; // Don't proceed with sensor activation yet
+                }
+            }
 
             //update the parent to show active/inactive
             new SettingsSync().execute(pref);
@@ -739,26 +782,75 @@ public class Aware_Client extends Aware_Activity {
     protected void onResume() {
         super.onResume();
 
-        permissions_ok = true;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            for (String p : REQUIRED_PERMISSIONS) {
-                if (PermissionChecker.checkSelfPermission(this, p) != PermissionChecker.PERMISSION_GRANTED) {
-                    permissions_ok = false;
-                    break;
+        // Only check for study-specific permissions if user has joined a study
+        boolean isInStudy = Aware.isStudy(getApplicationContext());
+        boolean hasShownPermissions = prefs.getBoolean("study_permissions_shown", false);
+        
+        if (isInStudy && !hasShownPermissions) {
+            // Get study-specific permissions
+            ArrayList<String> studyPermissions = getStudyRequiredPermissions();
+            
+            permissions_ok = true;
+            ArrayList<String> missingPermissions = new ArrayList<>();
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                for (String p : studyPermissions) {
+                    if (PermissionChecker.checkSelfPermission(this, p) != PermissionChecker.PERMISSION_GRANTED) {
+                        permissions_ok = false;
+                        missingPermissions.add(p);
+                    }
                 }
             }
+
+            if (!permissions_ok) {
+                Log.d(TAG, "Missing study-specific permissions: " + missingPermissions.size());
+                
+                // Mark that we've shown permissions for this study
+                prefs.edit().putBoolean("study_permissions_shown", true).apply();
+                
+                // Show permission check dialog first to explain what permissions are needed
+                JSONObject studyConfig = Aware.getStudyConfig(getApplicationContext(), 
+                    Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER));
+                
+                if (studyConfig != null) {
+                    JSONArray studyConfigs = new JSONArray().put(studyConfig);
+                    PermissionCheckDialog permissionDialog = new PermissionCheckDialog(this);
+                    permissionDialog.showPermissionCheck(studyConfigs, new Runnable() {
+                        @Override
+                        public void run() {
+                            // After dialog is dismissed, proceed with permission request if needed
+                            checkAndRequestPermissions();
+                        }
+                    });
+                } else {
+                    // No study config, just request missing permissions directly
+                    requestMissingPermissions(missingPermissions);
+                }
+            }
+        } else {
+            // Not in a study or already shown permissions, check for core permissions only
+            permissions_ok = checkCorePermissions();
         }
 
-        if (!permissions_ok) {
-            Log.d(TAG, "Requesting permissions...");
-
-            Intent permissionsHandler = new Intent(this, PermissionsHandler.class);
-            permissionsHandler.putStringArrayListExtra(PermissionsHandler.EXTRA_REQUIRED_PERMISSIONS, REQUIRED_PERMISSIONS);
-            permissionsHandler.putExtra(PermissionsHandler.EXTRA_REDIRECT_ACTIVITY, getPackageName() + "/" + getClass().getName());
-            permissionsHandler.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(permissionsHandler);
-
-        } else {
+        if (permissions_ok) {
+            // Check if there's a pending sensor to enable after permissions were granted
+            String pendingSensor = prefs.getString("pending_sensor_enable", null);
+            if (pendingSensor != null) {
+                // Re-enable the sensor now that permissions are granted
+                Aware.setSetting(getApplicationContext(), pendingSensor, "true");
+                CheckBoxPreference sensorPref = (CheckBoxPreference) findPreference(pendingSensor);
+                if (sensorPref != null) {
+                    sensorPref.setChecked(true);
+                }
+                
+                // Clear the pending sensor
+                prefs.edit().remove("pending_sensor_enable").apply();
+                
+                // Start the sensor
+                Aware.startAWARE(getApplicationContext());
+                
+                Toast.makeText(this, AwareUtil.getSensorType(pendingSensor) + " enabled", Toast.LENGTH_SHORT).show();
+            }
 
             if (prefs.getAll().isEmpty() && Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID).length() == 0) {
                 PreferenceManager.setDefaultValues(getApplicationContext(), "com.aware.phone", Context.MODE_PRIVATE, R.xml.aware_preferences, true);
@@ -986,6 +1078,138 @@ public class Aware_Client extends Aware_Activity {
                 studyCategory.addPreference(originalTakeNotesPref);
             }
         }
+    }
+    
+    /**
+     * Check if core permissions are granted
+     */
+    private boolean checkCorePermissions() {
+        ArrayList<String> corePermissions = new ArrayList<>();
+        corePermissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        corePermissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            corePermissions.add(Manifest.permission.FOREGROUND_SERVICE);
+        }
+        
+        for (String permission : corePermissions) {
+            if (PermissionChecker.checkSelfPermission(this, permission) != PermissionChecker.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    /**
+     * Get permissions required based on currently enabled sensors from study configuration
+     */
+    private ArrayList<String> getStudyRequiredPermissions() {
+        ArrayList<String> requiredPermissions = new ArrayList<>();
+        Set<String> uniquePermissions = new HashSet<>();
+        
+        // Always include core permissions
+        uniquePermissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        uniquePermissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            uniquePermissions.add(Manifest.permission.FOREGROUND_SERVICE);
+        }
+        
+        // Get study configuration
+        JSONObject studyConfig = Aware.getStudyConfig(getApplicationContext(), 
+            Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER));
+            
+        if (studyConfig != null) {
+            try {
+                if (studyConfig.has("sensors")) {
+                    JSONArray sensors = studyConfig.getJSONArray("sensors");
+                    
+                    for (int i = 0; i < sensors.length(); i++) {
+                        JSONObject sensorConfig = sensors.getJSONObject(i);
+                        String sensorSetting = sensorConfig.getString("setting");
+                        
+                        // Only add permissions for enabled sensors
+                        if (sensorConfig.getBoolean("value")) {
+                            List<String> sensorPermissions = SensorPermissionMapper.getRequiredPermissions(sensorSetting);
+                            uniquePermissions.addAll(sensorPermissions);
+                        }
+                    }
+                }
+            } catch (JSONException e) {
+                Log.e(TAG, "Error parsing study configuration for permissions", e);
+            }
+        }
+        
+        // Convert set back to list
+        requiredPermissions.addAll(uniquePermissions);
+        return requiredPermissions;
+    }
+    
+    /**
+     * Check current permissions and request any missing ones
+     */
+    private void checkAndRequestPermissions() {
+        ArrayList<String> studyPermissions = getStudyRequiredPermissions();
+        ArrayList<String> missingPermissions = new ArrayList<>();
+        
+        for (String permission : studyPermissions) {
+            if (PermissionChecker.checkSelfPermission(this, permission) != PermissionChecker.PERMISSION_GRANTED) {
+                missingPermissions.add(permission);
+            }
+        }
+        
+        if (!missingPermissions.isEmpty()) {
+            requestMissingPermissions(missingPermissions);
+        }
+    }
+    
+    /**
+     * Request the specified missing permissions
+     */
+    private void requestMissingPermissions(ArrayList<String> missingPermissions) {
+        Log.d(TAG, "Requesting " + missingPermissions.size() + " missing permissions");
+        
+        Intent permissionsHandler = new Intent(this, PermissionsHandler.class);
+        permissionsHandler.putStringArrayListExtra(PermissionsHandler.EXTRA_REQUIRED_PERMISSIONS, missingPermissions);
+        permissionsHandler.putExtra(PermissionsHandler.EXTRA_REDIRECT_ACTIVITY, getPackageName() + "/" + getClass().getName());
+        permissionsHandler.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(permissionsHandler);
+    }
+    
+    /**
+     * Show a dialog explaining why a specific sensor needs permissions
+     */
+    private void showSensorPermissionDialog(final String sensorKey, final ArrayList<String> missingPermissions) {
+        final String sensorName = AwareUtil.getSensorType(sensorKey);
+        
+        StringBuilder message = new StringBuilder();
+        message.append(sensorName).append(" requires the following permissions:\n\n");
+        
+        for (String permission : missingPermissions) {
+            String permissionName = permission.substring(permission.lastIndexOf('.') + 1);
+            String description = SensorPermissionMapper.getPermissionDescription(permission);
+            message.append("• ").append(permissionName).append("\n  ").append(description).append("\n\n");
+        }
+        
+        message.append("Would you like to grant these permissions?");
+        
+        new AlertDialog.Builder(this)
+            .setTitle("Permissions Required")
+            .setMessage(message.toString())
+            .setPositiveButton("Grant Permissions", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    // Store the sensor key so we can re-enable it after permissions are granted
+                    prefs.edit().putString("pending_sensor_enable", sensorKey).apply();
+                    requestMissingPermissions(missingPermissions);
+                }
+            })
+            .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    // User cancelled - sensor remains disabled
+                    Toast.makeText(Aware_Client.this, sensorName + " will remain disabled", Toast.LENGTH_SHORT).show();
+                }
+            })
+            .show();
     }
 
 
