@@ -724,7 +724,7 @@ public class Aware extends Service {
                 Aware.setSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID, uuid.toString(), "com.aware.phone");
             }
 
-            if (Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER).length() == 0) {
+            if (Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER).isEmpty()) {
                 Aware.setSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER, "https://api.awareframework.com/index.php");
             }
 
@@ -821,14 +821,24 @@ public class Aware extends Service {
                 // Set scheduler for syncing config data
                 try {
                     Scheduler.Schedule syncConfig = Scheduler.getSchedule(this, Aware.SCHEDULE_SYNC_CONFIG);
-                    frequency = Long.parseLong(getSetting(this, Aware_Preferences.FREQUENCY_SYNC_CONFIG));
+                    
+                    // Parse frequency with default value of 60 minutes if setting is empty or invalid
+                    long syncConfigFrequency = 60; // Default: 60 minutes
+                    try {
+                        String frequencySetting = getSetting(this, Aware_Preferences.FREQUENCY_SYNC_CONFIG);
+                        if (!frequencySetting.isEmpty()) {
+                            syncConfigFrequency = Long.parseLong(frequencySetting);
+                        }
+                    } catch (NumberFormatException e) {
+                        Log.e(TAG, "Invalid FREQUENCY_SYNC_CONFIG setting, using default: " + syncConfigFrequency);
+                    }
 
-                    if (syncConfig != null && syncConfig.getInterval() != frequency) {
-                        syncConfig.setInterval(frequency);
+                    if (syncConfig != null && syncConfig.getInterval() != syncConfigFrequency) {
+                        syncConfig.setInterval(syncConfigFrequency);
                     }
                     if (syncConfig == null) {
                         syncConfig = new Scheduler.Schedule(Aware.SCHEDULE_SYNC_CONFIG);
-                        syncConfig.setInterval(frequency)
+                        syncConfig.setInterval(syncConfigFrequency)
                                 .setActionType(Scheduler.ACTION_TYPE_BROADCAST)
                                 .setActionIntentAction(Aware.ACTION_AWARE_SYNC_CONFIG);
 
