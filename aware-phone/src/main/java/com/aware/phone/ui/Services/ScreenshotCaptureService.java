@@ -25,6 +25,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Display;
 import android.view.Surface;
 import android.view.WindowManager;
 
@@ -62,6 +63,8 @@ public class ScreenshotCaptureService extends Service {
     private boolean isScreenOff = false;
     private long lastCaptureTime = 0;
     private int capture_delay = 3000;
+    private final Object imageReaderLock = new Object();
+    private final Object handlerLock = new Object();
 
     private BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
         @Override
@@ -149,7 +152,12 @@ public class ScreenshotCaptureService extends Service {
     private void startForegroundService(int resultCode, Intent data) {
         Intent stopSelf = new Intent(this, ScreenshotCaptureService.class);
         stopSelf.setAction(ACTION_STOP_CAPTURE);
-        PendingIntent pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT);
+        PendingIntent pStopSelf;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        } else {
+            pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT);
+        }
 
         Notification notification = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setContentTitle("Screen Capture")
@@ -167,13 +175,27 @@ public class ScreenshotCaptureService extends Service {
 
         windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         DisplayMetrics metrics = new DisplayMetrics();
-        windowManager.getDefaultDisplay().getMetrics(metrics);
+        if (Build.VERSION.SDK_INT >= 30) { // Android 11 (R)
+            DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+            if (displayManager != null && displayManager.getDisplay(Display.DEFAULT_DISPLAY) != null) {
+                displayManager.getDisplay(Display.DEFAULT_DISPLAY).getRealMetrics(metrics);
+            }
+        } else {
+            windowManager.getDefaultDisplay().getMetrics(metrics);
+        }
 
         width = metrics.widthPixels;
         height = metrics.heightPixels;
         density = metrics.densityDpi;
 
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
+        // Create handler before using it in callbacks
+        handlerThread = new HandlerThread("ScreenCaptureThread");
+        handlerThread.start();
+        handler = new Handler(handlerThread.getLooper());
+        
+        synchronized (imageReaderLock) {
+            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
+        }
 
         mediaProjection.registerCallback(new MediaProjection.Callback() {
             @Override
@@ -184,21 +206,20 @@ public class ScreenshotCaptureService extends Service {
             }
         }, handler);
 
-        virtualDisplay = mediaProjection.createVirtualDisplay(
-                "ScreenCapture",
-                width,
-                height,
-                density,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader.getSurface(),
-                null,
-                handler
-        );
+        synchronized (imageReaderLock) {
+            virtualDisplay = mediaProjection.createVirtualDisplay(
+                    "ScreenCapture",
+                    width,
+                    height,
+                    density,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                    imageReader.getSurface(),
+                    null,
+                    handler
+            );
+        }
         Log.d(TAG, "Virtual display created");
-
-        handlerThread = new HandlerThread("ScreenCaptureThread");
-        handlerThread.start();
-        handler = new Handler(handlerThread.getLooper());
+        
         handler.post(captureRunnable);
     }
 
@@ -206,29 +227,78 @@ public class ScreenshotCaptureService extends Service {
      * Runnable task that captures the screen image at regular intervals.
      */
     private final Runnable captureRunnable = new Runnable() {
+        private static final int MAX_RETRY_COUNT = 5;
+        private static final int BASE_BACKOFF_MS = 100;
+        private static final int MAX_BACKOFF_MS = 5000;
         private int retryCount = 0;
+        
         @Override
         public void run() {
             Log.d(TAG, "CaptureRunnable running");
             if (!isScreenOff) {
                 long currentTime = System.currentTimeMillis();
-                if (currentTime - lastCaptureTime >= capture_delay || retryCount > 0) { // Ensure 5 seconds interval
-                    Image image = imageReader.acquireLatestImage();
-                    if (image != null) {
-                        retryCount = 0;
-                        lastCaptureTime = currentTime;
-                        processImage(image);
-                        image.close();
-                        handler.postDelayed(this, capture_delay); // Schedule the next capture in 5 seconds
-                    } else {
-                        Log.e(TAG, "Failed to capture image: image is null");
-                        resetImageReader();
-                        retryCount++;
-                        int retryDelay = Math.min(capture_delay, retryCount * 100); // Backoff strategy: max 5 seconds
-                        handler.postDelayed(this, retryDelay); // Retry after a delay
+                if (currentTime - lastCaptureTime >= capture_delay || retryCount > 0) {
+                    Image image = null;
+                    try {
+                        synchronized (imageReaderLock) {
+                            if (imageReader != null) {
+                                image = imageReader.acquireLatestImage();
+                            }
+                        }
+                        
+                        if (image != null) {
+                            retryCount = 0; // Reset on success
+                            lastCaptureTime = currentTime;
+                            processImage(image);
+                            synchronized (handlerLock) {
+                                if (handler != null) {
+                                    handler.postDelayed(this, capture_delay);
+                                }
+                            }
+                        } else {
+                            handleRetry();
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error in capture runnable: " + e.getMessage(), e);
+                        handleRetry();
+                    } finally {
+                        if (image != null) {
+                            image.close();
+                        }
                     }
                 } else {
-                    handler.postDelayed(this, 100); // Check again in 100ms if interval is not met
+                    synchronized (handlerLock) {
+                        if (handler != null) {
+                            handler.postDelayed(this, capture_delay - (currentTime - lastCaptureTime));
+                        }
+                    }
+                }
+            }
+        }
+        
+        private void handleRetry() {
+            Log.e(TAG, "Failed to capture image, retrying...");
+            resetImageReader();
+            retryCount++;
+            
+            if (retryCount > MAX_RETRY_COUNT) {
+                Log.e(TAG, "Max retry count exceeded, stopping capture");
+                return;
+            }
+            
+            // Exponential backoff with jitter
+            int backoffMs = Math.min(
+                BASE_BACKOFF_MS * (int) Math.pow(2, retryCount - 1),
+                MAX_BACKOFF_MS
+            );
+            // Add jitter (±20%)
+            int jitter = (int) (backoffMs * 0.2 * (Math.random() - 0.5));
+            int retryDelay = Math.max(backoffMs + jitter, BASE_BACKOFF_MS);
+            
+            Log.d(TAG, "Retrying in " + retryDelay + "ms (attempt " + retryCount + ")");
+            synchronized (handlerLock) {
+                if (handler != null) {
+                    handler.postDelayed(this, retryDelay);
                 }
             }
         }
@@ -239,10 +309,24 @@ public class ScreenshotCaptureService extends Service {
      */
     private void resetImageReader() {
         Log.d(TAG, "Resetting ImageReader");
-        imageReader.setOnImageAvailableListener(null, null);
-        imageReader.close();
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
-        virtualDisplay.setSurface(imageReader.getSurface());
+        synchronized (imageReaderLock) {
+            try {
+                if (imageReader != null) {
+                    imageReader.setOnImageAvailableListener(null, null);
+                    imageReader.close();
+                    imageReader = null;
+                }
+                
+                imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
+                
+                if (virtualDisplay != null) {
+                    virtualDisplay.setSurface(imageReader.getSurface());
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error resetting ImageReader: " + e.getMessage(), e);
+                imageReader = null;
+            }
+        }
     }
 
     /**
@@ -251,6 +335,7 @@ public class ScreenshotCaptureService extends Service {
      * @param image The captured image.
      */
     private void processImage(Image image) {
+        Bitmap bitmap = null;
         try {
             Image.Plane[] planes = image.getPlanes();
             ByteBuffer buffer = planes[0].getBuffer();
@@ -258,12 +343,24 @@ public class ScreenshotCaptureService extends Service {
             int rowStride = planes[0].getRowStride();
             int rowPadding = rowStride - pixelStride * width;
 
-            Bitmap bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
+            bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
             bitmap.copyPixelsFromBuffer(buffer);
 
-            saveBitmap(bitmap);
+            // Save on background thread to avoid blocking
+            final Bitmap bitmapToSave = bitmap;
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    saveBitmap(bitmapToSave);
+                }
+            }).start();
         } catch (Exception e) {
             Log.e(TAG, "Error processing image", e);
+        } finally {
+            // Always recycle bitmap to prevent memory leak
+            if (bitmap != null && !bitmap.isRecycled()) {
+                bitmap.recycle();
+            }
         }
     }
 
@@ -281,29 +378,46 @@ public class ScreenshotCaptureService extends Service {
 
         String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
         File path = new File(downloadsDirectory, "screenshot_" + timestamp + ".jpg");
-        try (FileOutputStream fos = new FileOutputStream(path)) {
-            bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, fos); // Use the selected compression rate
+        FileOutputStream fos = null;
+        
+        try {
+            fos = new FileOutputStream(path);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, fos);
             fos.flush();
             Log.d(TAG, "Screenshot saved to " + path.getAbsolutePath());
+            
+            long fileSizeInBytes = path.length();
+            long fileSizeInKB = fileSizeInBytes / 1024;
+            long fileSizeInMB = fileSizeInKB / 1024;
+
+            Log.d(TAG, "File size: " + fileSizeInBytes + " bytes");
+            Log.d(TAG, "File size: " + fileSizeInKB + " KB");
+            Log.d(TAG, "File size: " + fileSizeInMB + " MB");
         } catch (IOException e) {
             Log.e(TAG, "Error saving screenshot", e);
+            // Clean up partial file on error
+            if (path.exists()) {
+                path.delete();
+            }
+        } finally {
+            if (fos != null) {
+                try {
+                    fos.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error closing FileOutputStream", e);
+                }
+            }
         }
-
-        long fileSizeInBytes = path.length();
-        long fileSizeInKB = fileSizeInBytes / 1024;
-        long fileSizeInMB = fileSizeInKB / 1024;
-
-        Log.d(TAG, "File size: " + fileSizeInBytes + " bytes");
-        Log.d(TAG, "File size: " + fileSizeInKB + " KB");
-        Log.d(TAG, "File size: " + fileSizeInMB + " MB");
     }
 
     /**
      * Stops capturing screenshots.
      */
     private void stopCapturing() {
-        if (handler != null && captureRunnable != null) {
-            handler.removeCallbacks(captureRunnable);
+        synchronized (handlerLock) {
+            if (handler != null && captureRunnable != null) {
+                handler.removeCallbacks(captureRunnable);
+            }
         }
     }
 
@@ -311,8 +425,10 @@ public class ScreenshotCaptureService extends Service {
      * Starts capturing screenshots.
      */
     private void startCapturing() {
-        if (handler != null && captureRunnable != null) {
-            handler.post(captureRunnable);
+        synchronized (handlerLock) {
+            if (handler != null && captureRunnable != null) {
+                handler.post(captureRunnable);
+            }
         }
     }
 
@@ -321,25 +437,66 @@ public class ScreenshotCaptureService extends Service {
      */
     private void cleanupResources() {
         Log.d(TAG, "Cleaning up resources");
+        
+        // Stop capturing first
         stopCapturing();
-        if (handlerThread != null) {
-            handlerThread.quitSafely();
+        
+        // Cleanup handler and thread
+        synchronized (handlerLock) {
+            if (handlerThread != null) {
+                handlerThread.quitSafely();
+                try {
+                    handlerThread.join(1000); // Wait max 1 second
+                } catch (InterruptedException e) {
+                    Log.e(TAG, "Interrupted while waiting for handler thread", e);
+                }
+                handlerThread = null;
+            }
+            handler = null;
         }
-        if (imageReader != null) {
-            imageReader.close();
+        
+        // Cleanup ImageReader
+        synchronized (imageReaderLock) {
+            if (imageReader != null) {
+                try {
+                    imageReader.setOnImageAvailableListener(null, null);
+                    imageReader.close();
+                } catch (Exception e) {
+                    Log.e(TAG, "Error closing ImageReader", e);
+                }
+                imageReader = null;
+            }
         }
+        
+        // Cleanup VirtualDisplay
         if (virtualDisplay != null) {
-            virtualDisplay.release();
+            try {
+                virtualDisplay.release();
+            } catch (Exception e) {
+                Log.e(TAG, "Error releasing VirtualDisplay", e);
+            }
+            virtualDisplay = null;
         }
+        
+        // Stop MediaProjection
         if (mediaProjection != null) {
-            mediaProjection.stop();
+            try {
+                mediaProjection.stop();
+            } catch (Exception e) {
+                Log.e(TAG, "Error stopping MediaProjection", e);
+            }
+            mediaProjection = null;
         }
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        unregisterReceiver(screenStateReceiver);
+        try {
+            unregisterReceiver(screenStateReceiver);
+        } catch (IllegalArgumentException e) {
+            Log.d(TAG, "Receiver already unregistered");
+        }
         cleanupResources();
     }
 

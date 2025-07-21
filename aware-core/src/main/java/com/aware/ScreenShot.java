@@ -30,6 +30,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Display;
 import android.view.WindowManager;
 import androidx.core.app.NotificationCompat;
 import com.aware.providers.ScreenShot_Provider;
@@ -69,6 +70,7 @@ public class ScreenShot extends Aware_Sensor {
     private ImageReader imageReader;
     private Handler handler;
     private HandlerThread handlerThread;
+    private final Object handlerLock = new Object();
     private int width;
     private int height;
     private boolean isScreenOff = false;
@@ -220,7 +222,11 @@ public class ScreenShot extends Aware_Sensor {
         Intent stopSelf = new Intent(this, ScreenShot.class);
         stopSelf.setAction(ACTION_STOP_CAPTURE);
         PendingIntent pStopSelf;
-        pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        } else {
+            pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT);
+        }
 
         Notification notification = new NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
                 .setContentTitle("Screen Capture Active")
@@ -242,13 +248,27 @@ public class ScreenShot extends Aware_Sensor {
 
         WindowManager windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         DisplayMetrics metrics = new DisplayMetrics();
-        windowManager.getDefaultDisplay().getMetrics(metrics);
+        if (Build.VERSION.SDK_INT >= 30) { // Android 11 (R)
+            DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+            if (displayManager != null && displayManager.getDisplay(Display.DEFAULT_DISPLAY) != null) {
+                displayManager.getDisplay(Display.DEFAULT_DISPLAY).getRealMetrics(metrics);
+            }
+        } else {
+            windowManager.getDefaultDisplay().getMetrics(metrics);
+        }
 
         width = metrics.widthPixels;
         height = metrics.heightPixels;
         int density = metrics.densityDpi;
 
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
+        // Create handler before using it in callbacks
+        handlerThread = new HandlerThread("ScreenCaptureThread");
+        handlerThread.start();
+        handler = new Handler(handlerThread.getLooper());
+        
+        synchronized (imageReaderLock) {
+            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
+        }
 
         mediaProjection.registerCallback(new MediaProjection.Callback() {
             @Override
@@ -258,21 +278,20 @@ public class ScreenShot extends Aware_Sensor {
             }
         }, handler);
 
-        virtualDisplay = mediaProjection.createVirtualDisplay(
-                "ScreenCapture",
-                width,
-                height,
-                density,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader.getSurface(),
-                null,
-                handler
-        );
+        synchronized (imageReaderLock) {
+            virtualDisplay = mediaProjection.createVirtualDisplay(
+                    "ScreenCapture",
+                    width,
+                    height,
+                    density,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                    imageReader.getSurface(),
+                    null,
+                    handler
+            );
+        }
         Log.d(TAG, "Virtual display created");
-
-        handlerThread = new HandlerThread("ScreenCaptureThread");
-        handlerThread.start();
-        handler = new Handler(handlerThread.getLooper());
+        
         handler.post(captureRunnable);
     }
 
@@ -282,7 +301,10 @@ public class ScreenShot extends Aware_Sensor {
      */
     private final Runnable captureRunnable = new Runnable() {
         private static final int MAX_RETRY_COUNT = 5;
+        private static final int BASE_BACKOFF_MS = 100;
+        private static final int MAX_BACKOFF_MS = 5000;
         private int retryCount = 0;
+        
         @Override
         public void run() {
             if (!isScreenOff) {
@@ -295,25 +317,66 @@ public class ScreenShot extends Aware_Sensor {
                 
                 long currentTime = System.currentTimeMillis();
                 if (currentTime - lastCaptureTime >= capture_delay || retryCount > 0) {
-                    Image image = imageReader.acquireLatestImage();
-                    if (image != null) {
-                        retryCount = 0;
-                        lastCaptureTime = currentTime;
-                        processImage(image, currentTime);
-                        image.close();
-                        handler.postDelayed(this, capture_delay);
-                    } else {
-                        resetImageReader();
-                        retryCount++;
-                        if (retryCount > MAX_RETRY_COUNT) {
-                            sendRetryExceededBroadcast();
-                            return;
+                    Image image = null;
+                    try {
+                        synchronized (imageReaderLock) {
+                            if (imageReader != null) {
+                                image = imageReader.acquireLatestImage();
+                            }
                         }
-                        int retryDelay = Math.min(capture_delay, retryCount * 100);
-                        handler.postDelayed(this, retryDelay);
+                        
+                        if (image != null) {
+                            retryCount = 0; // Reset on success
+                            lastCaptureTime = currentTime;
+                            processImage(image, currentTime);
+                            synchronized (handlerLock) {
+                                if (handler != null) {
+                                    handler.postDelayed(this, capture_delay);
+                                }
+                            }
+                        } else {
+                            handleRetry();
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error in capture runnable: " + e.getMessage(), e);
+                        handleRetry();
+                    } finally {
+                        if (image != null) {
+                            image.close();
+                        }
                     }
                 } else {
-                    handler.postDelayed(this, capture_delay - (currentTime - lastCaptureTime));
+                    synchronized (handlerLock) {
+                        if (handler != null) {
+                            handler.postDelayed(this, capture_delay - (currentTime - lastCaptureTime));
+                        }
+                    }
+                }
+            }
+        }
+        
+        private void handleRetry() {
+            resetImageReader();
+            retryCount++;
+            if (retryCount > MAX_RETRY_COUNT) {
+                Log.e(TAG, "Max retry count exceeded");
+                sendRetryExceededBroadcast();
+                return;
+            }
+            
+            // Exponential backoff with jitter
+            int backoffMs = Math.min(
+                BASE_BACKOFF_MS * (int) Math.pow(2, retryCount - 1),
+                MAX_BACKOFF_MS
+            );
+            // Add jitter (±20%)
+            int jitter = (int) (backoffMs * 0.2 * (Math.random() - 0.5));
+            int retryDelay = Math.max(backoffMs + jitter, BASE_BACKOFF_MS);
+            
+            Log.d(TAG, "Retrying in " + retryDelay + "ms (attempt " + retryCount + ")");
+            synchronized (handlerLock) {
+                if (handler != null) {
+                    handler.postDelayed(this, retryDelay);
                 }
             }
         }
@@ -362,13 +425,21 @@ public class ScreenShot extends Aware_Sensor {
      */
     private void resetImageReader() {
         synchronized (imageReaderLock) {
-            if (imageReader != null) {
-                imageReader.setOnImageAvailableListener(null, null);
-                imageReader.close();
-            }
-            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
-            if (virtualDisplay != null) {
-                virtualDisplay.setSurface(imageReader.getSurface());
+            try {
+                if (imageReader != null) {
+                    imageReader.setOnImageAvailableListener(null, null);
+                    imageReader.close();
+                    imageReader = null;
+                }
+                
+                imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
+                
+                if (virtualDisplay != null) {
+                    virtualDisplay.setSurface(imageReader.getSurface());
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error resetting ImageReader: " + e.getMessage(), e);
+                imageReader = null;
             }
         }
     }
@@ -380,11 +451,13 @@ public class ScreenShot extends Aware_Sensor {
      * @param timestamp The timestamp for the captured image.
      */
     private void processImage(Image image, long timestamp) {
-
+        Bitmap bitmap = null;
+        
         synchronized (imageReaderLock) {
             if (imageReader == null) {
                 return;
             }
+            
             foregroundApp = Applications.getForegroundPackageName();
             application_name = Applications.getForegroundApplicationName();
 
@@ -399,13 +472,19 @@ public class ScreenShot extends Aware_Sensor {
                 int rowStride = planes[0].getRowStride();
                 int rowPadding = rowStride - pixelStride * width;
 
-                Bitmap bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
+                bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
                 bitmap.copyPixelsFromBuffer(buffer);
 
-
                 if (saveToLocalStorage) {
-                    saveBitmap(bitmap, timestamp);
-                    Log.d(TAG, "Screenshot saved to local storage");
+                    // Save on background thread to avoid blocking
+                    final Bitmap bitmapToSave = bitmap;
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            saveBitmap(bitmapToSave, timestamp);
+                            Log.d(TAG, "Screenshot saved to local storage");
+                        }
+                    }).start();
                 }
 
                 Log.d(TAG, "Storing screenshot metadata");
@@ -414,6 +493,11 @@ public class ScreenShot extends Aware_Sensor {
 
             } catch (Exception e) {
                 Log.e(TAG, "Error processing image", e);
+            } finally {
+                // Always recycle bitmap to prevent memory leak
+                if (bitmap != null && !bitmap.isRecycled()) {
+                    bitmap.recycle();
+                }
             }
         }
     }
@@ -431,20 +515,33 @@ public class ScreenShot extends Aware_Sensor {
             return;
         }
 
-
         String formattedTimestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(timestamp);
         File path = new File(downloadsDirectory, "screenshot_" + formattedTimestamp + ".jpg");
-        try (FileOutputStream fos = new FileOutputStream(path)) {
-            bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, fos); // Use the selected compression rate
+        FileOutputStream fos = null;
+        
+        try {
+            fos = new FileOutputStream(path);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, fos);
             fos.flush();
+            
+            long fileSizeInBytes = path.length();
+            long fileSizeInKB = fileSizeInBytes / 1024;
+            Log.d(TAG, "File size: " + fileSizeInKB + " KB");
         } catch (IOException e) {
             Log.e(TAG, "Error saving screenshot", e);
+            // Clean up partial file on error
+            if (path.exists()) {
+                path.delete();
+            }
+        } finally {
+            if (fos != null) {
+                try {
+                    fos.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error closing FileOutputStream", e);
+                }
+            }
         }
-
-        long fileSizeInBytes = path.length();
-        long fileSizeInKB = fileSizeInBytes / 1024;
-
-        Log.d(TAG, "File size: " + fileSizeInKB + " KB");
     }
 
     /**
@@ -454,9 +551,20 @@ public class ScreenShot extends Aware_Sensor {
      * @return The byte array representation of the bitmap.
      */
     private byte[] convertBitmapToByteArray(Bitmap bitmap) {
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, stream);
-        return stream.toByteArray();
+        ByteArrayOutputStream stream = null;
+        try {
+            stream = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, stream);
+            return stream.toByteArray();
+        } finally {
+            if (stream != null) {
+                try {
+                    stream.close();
+                } catch (IOException e) {
+                    Log.e(TAG, "Error closing ByteArrayOutputStream", e);
+                }
+            }
+        }
     }
 
     /**
@@ -512,8 +620,10 @@ public class ScreenShot extends Aware_Sensor {
      * Stops the screen capturing process by removing the capture runnable from the handler.
      */
     private void stopCapturing() {
-        if (handler != null) {
-            handler.removeCallbacks(captureRunnable);
+        synchronized (handlerLock) {
+            if (handler != null) {
+                handler.removeCallbacks(captureRunnable);
+            }
         }
     }
 
@@ -521,8 +631,10 @@ public class ScreenShot extends Aware_Sensor {
      * Starts the screen capturing process by posting the capture runnable to the handler.
      */
     private void startCapturing() {
-        if (handler != null) {
-            handler.post(captureRunnable);
+        synchronized (handlerLock) {
+            if (handler != null) {
+                handler.post(captureRunnable);
+            }
         }
     }
 
@@ -531,31 +643,65 @@ public class ScreenShot extends Aware_Sensor {
      */
     private void cleanupResources() {
         Log.d(TAG, "Cleaning up resources");
+        
+        // Stop capturing first
         stopCapturing();
-        if (handlerThread != null) {
-            handlerThread.quitSafely();
+        
+        // Cleanup handler and thread
+        synchronized (handlerLock) {
+            if (handlerThread != null) {
+                handlerThread.quitSafely();
+                try {
+                    handlerThread.join(1000); // Wait max 1 second
+                } catch (InterruptedException e) {
+                    Log.e(TAG, "Interrupted while waiting for handler thread", e);
+                }
+                handlerThread = null;
+            }
+            handler = null;
         }
-        if (imageReader != null) {
-            imageReader.close();
-        }
-        if (virtualDisplay != null) {
-            virtualDisplay.release();
-        }
-        if (mediaProjection != null) {
-            mediaProjection.stop();
-        }
-
+        
+        // Cleanup ImageReader
         synchronized (imageReaderLock) {
             if (imageReader != null) {
-                imageReader.close();
+                try {
+                    imageReader.setOnImageAvailableListener(null, null);
+                    imageReader.close();
+                } catch (Exception e) {
+                    Log.e(TAG, "Error closing ImageReader", e);
+                }
                 imageReader = null;
             }
         }
+        
+        // Cleanup VirtualDisplay
+        if (virtualDisplay != null) {
+            try {
+                virtualDisplay.release();
+            } catch (Exception e) {
+                Log.e(TAG, "Error releasing VirtualDisplay", e);
+            }
+            virtualDisplay = null;
+        }
+        
+        // Stop MediaProjection
+        if (mediaProjection != null) {
+            try {
+                mediaProjection.stop();
+            } catch (Exception e) {
+                Log.e(TAG, "Error stopping MediaProjection", e);
+            }
+            mediaProjection = null;
+        }
 
         // Broadcast that the service has stopped
-        Intent intent = new Intent(ACTION_SCREENSHOT_SERVICE_STOPPED);
-        intent.setFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-        sendBroadcast(intent);
+        try {
+            Intent intent = new Intent(ACTION_SCREENSHOT_SERVICE_STOPPED);
+            intent.setFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+            sendBroadcast(intent);
+        } catch (Exception e) {
+            Log.e(TAG, "Error sending broadcast", e);
+        }
     }
 
     /**
@@ -564,7 +710,11 @@ public class ScreenShot extends Aware_Sensor {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        unregisterReceiver(screenStateReceiver);
+        try {
+            unregisterReceiver(screenStateReceiver);
+        } catch (IllegalArgumentException e) {
+            Log.d(TAG, "Receiver already unregistered");
+        }
         cleanupResources();
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(
