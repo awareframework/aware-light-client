@@ -1,4 +1,7 @@
 Change log for AWARE
+4.7.3.beta
+- Add permission check dialog
+
 4.7.2.beta
 - Fix ESM settings parsing crashes and improve error handling
 
