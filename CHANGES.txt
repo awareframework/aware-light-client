@@ -1,4 +1,7 @@
 Change log for AWARE
+4.7.4.beta
+- Enhance cursor management and improve stability of screenshot service
+
 4.7.3.beta
 - Add permission check dialog
 
