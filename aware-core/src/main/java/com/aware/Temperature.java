@@ -175,24 +175,30 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
     }
 
     private void saveSensorDevice(Sensor sensor) {
-        Cursor sensorInfo = getContentResolver().query(Temperature_Sensor.CONTENT_URI, null, null, null, null);
-        if (sensorInfo == null || !sensorInfo.moveToFirst()) {
-            ContentValues rowData = new ContentValues();
-            rowData.put(Temperature_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-            rowData.put(Temperature_Sensor.TIMESTAMP, System.currentTimeMillis());
-            rowData.put(Temperature_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
-            rowData.put(Temperature_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
-            rowData.put(Temperature_Sensor.NAME, sensor.getName());
-            rowData.put(Temperature_Sensor.POWER_MA, sensor.getPower());
-            rowData.put(Temperature_Sensor.RESOLUTION, sensor.getResolution());
-            rowData.put(Temperature_Sensor.TYPE, sensor.getType());
-            rowData.put(Temperature_Sensor.VENDOR, sensor.getVendor());
-            rowData.put(Temperature_Sensor.VERSION, sensor.getVersion());
+        Cursor sensorInfo = null;
+        try {
+            sensorInfo = getContentResolver().query(Temperature_Sensor.CONTENT_URI, null, null, null, null);
+            if (sensorInfo == null || !sensorInfo.moveToFirst()) {
+                ContentValues rowData = new ContentValues();
+                rowData.put(Temperature_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                rowData.put(Temperature_Sensor.TIMESTAMP, System.currentTimeMillis());
+                rowData.put(Temperature_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
+                rowData.put(Temperature_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
+                rowData.put(Temperature_Sensor.NAME, sensor.getName());
+                rowData.put(Temperature_Sensor.POWER_MA, sensor.getPower());
+                rowData.put(Temperature_Sensor.RESOLUTION, sensor.getResolution());
+                rowData.put(Temperature_Sensor.TYPE, sensor.getType());
+                rowData.put(Temperature_Sensor.VENDOR, sensor.getVendor());
+                rowData.put(Temperature_Sensor.VERSION, sensor.getVersion());
 
-            getContentResolver().insert(Temperature_Sensor.CONTENT_URI, rowData);
-            if (Aware.DEBUG) Log.d(TAG, "Temperature sensor info: " + rowData.toString());
+                getContentResolver().insert(Temperature_Sensor.CONTENT_URI, rowData);
+                if (Aware.DEBUG) Log.d(TAG, "Temperature sensor info: " + rowData.toString());
+            }
+        } finally {
+            if (sensorInfo != null && !sensorInfo.isClosed()) {
+                sensorInfo.close();
+            }
         }
-        if (sensorInfo != null && !sensorInfo.isClosed()) sensorInfo.close();
     }
 
     @SuppressWarnings("deprecation")

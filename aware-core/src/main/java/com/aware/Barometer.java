@@ -165,25 +165,31 @@ public class Barometer extends Aware_Sensor implements SensorEventListener {
     private void saveSensorDevice(Sensor sensor) {
         if (sensor == null) return;
 
-        Cursor sensorInfo = getContentResolver().query(Barometer_Sensor.CONTENT_URI, null, null, null, null);
-        if (sensorInfo == null || !sensorInfo.moveToFirst()) {
-            ContentValues rowData = new ContentValues();
-            rowData.put(Barometer_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-            rowData.put(Barometer_Sensor.TIMESTAMP, System.currentTimeMillis());
-            rowData.put(Barometer_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
-            rowData.put(Barometer_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
-            rowData.put(Barometer_Sensor.NAME, sensor.getName());
-            rowData.put(Barometer_Sensor.POWER_MA, sensor.getPower());
-            rowData.put(Barometer_Sensor.RESOLUTION, sensor.getResolution());
-            rowData.put(Barometer_Sensor.TYPE, sensor.getType());
-            rowData.put(Barometer_Sensor.VENDOR, sensor.getVendor());
-            rowData.put(Barometer_Sensor.VERSION, sensor.getVersion());
+        Cursor sensorInfo = null;
+        try {
+            sensorInfo = getContentResolver().query(Barometer_Sensor.CONTENT_URI, null, null, null, null);
+            if (sensorInfo == null || !sensorInfo.moveToFirst()) {
+                ContentValues rowData = new ContentValues();
+                rowData.put(Barometer_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                rowData.put(Barometer_Sensor.TIMESTAMP, System.currentTimeMillis());
+                rowData.put(Barometer_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
+                rowData.put(Barometer_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
+                rowData.put(Barometer_Sensor.NAME, sensor.getName());
+                rowData.put(Barometer_Sensor.POWER_MA, sensor.getPower());
+                rowData.put(Barometer_Sensor.RESOLUTION, sensor.getResolution());
+                rowData.put(Barometer_Sensor.TYPE, sensor.getType());
+                rowData.put(Barometer_Sensor.VENDOR, sensor.getVendor());
+                rowData.put(Barometer_Sensor.VERSION, sensor.getVersion());
 
-            getContentResolver().insert(Barometer_Sensor.CONTENT_URI, rowData);
+                getContentResolver().insert(Barometer_Sensor.CONTENT_URI, rowData);
 
-            if (Aware.DEBUG) Log.d(TAG, "Barometer sensor info: " + rowData.toString());
+                if (Aware.DEBUG) Log.d(TAG, "Barometer sensor info: " + rowData.toString());
+            }
+        } finally {
+            if (sensorInfo != null && !sensorInfo.isClosed()) {
+                sensorInfo.close();
+            }
         }
-        if (sensorInfo != null && !sensorInfo.isClosed()) sensorInfo.close();
     }
 
     @Override

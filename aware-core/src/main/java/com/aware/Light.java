@@ -177,25 +177,31 @@ public class Light extends Aware_Sensor implements SensorEventListener {
     }
 
     private void saveSensorDevice(Sensor sensor) {
-        Cursor sensorInfo = getContentResolver().query(Light_Sensor.CONTENT_URI, null, null, null, null);
-        if (sensorInfo == null || !sensorInfo.moveToFirst()) {
-            ContentValues rowData = new ContentValues();
-            rowData.put(Light_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-            rowData.put(Light_Sensor.TIMESTAMP, System.currentTimeMillis());
-            rowData.put(Light_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
-            rowData.put(Light_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
-            rowData.put(Light_Sensor.NAME, sensor.getName());
-            rowData.put(Light_Sensor.POWER_MA, sensor.getPower());
-            rowData.put(Light_Sensor.RESOLUTION, sensor.getResolution());
-            rowData.put(Light_Sensor.TYPE, sensor.getType());
-            rowData.put(Light_Sensor.VENDOR, sensor.getVendor());
-            rowData.put(Light_Sensor.VERSION, sensor.getVersion());
+        Cursor sensorInfo = null;
+        try {
+            sensorInfo = getContentResolver().query(Light_Sensor.CONTENT_URI, null, null, null, null);
+            if (sensorInfo == null || !sensorInfo.moveToFirst()) {
+                ContentValues rowData = new ContentValues();
+                rowData.put(Light_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                rowData.put(Light_Sensor.TIMESTAMP, System.currentTimeMillis());
+                rowData.put(Light_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
+                rowData.put(Light_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
+                rowData.put(Light_Sensor.NAME, sensor.getName());
+                rowData.put(Light_Sensor.POWER_MA, sensor.getPower());
+                rowData.put(Light_Sensor.RESOLUTION, sensor.getResolution());
+                rowData.put(Light_Sensor.TYPE, sensor.getType());
+                rowData.put(Light_Sensor.VENDOR, sensor.getVendor());
+                rowData.put(Light_Sensor.VERSION, sensor.getVersion());
 
-            getContentResolver().insert(Light_Sensor.CONTENT_URI, rowData);
+                getContentResolver().insert(Light_Sensor.CONTENT_URI, rowData);
 
-            if (Aware.DEBUG) Log.d(TAG, "Light sensor info: " + rowData.toString());
+                if (Aware.DEBUG) Log.d(TAG, "Light sensor info: " + rowData.toString());
+            }
+        } finally {
+            if (sensorInfo != null && !sensorInfo.isClosed()) {
+                sensorInfo.close();
+            }
         }
-        if (sensorInfo != null && !sensorInfo.isClosed()) sensorInfo.close();
     }
 
     @Override

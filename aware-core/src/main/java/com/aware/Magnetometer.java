@@ -180,25 +180,31 @@ public class Magnetometer extends Aware_Sensor implements SensorEventListener {
     }
 
     private void saveSensorDevice(Sensor sensor) {
-        Cursor sensorInfo = getContentResolver().query(Magnetometer_Sensor.CONTENT_URI, null, null, null, null);
-        if (sensorInfo == null || !sensorInfo.moveToFirst()) {
-            ContentValues rowData = new ContentValues();
-            rowData.put(Magnetometer_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-            rowData.put(Magnetometer_Sensor.TIMESTAMP, System.currentTimeMillis());
-            rowData.put(Magnetometer_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
-            rowData.put(Magnetometer_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
-            rowData.put(Magnetometer_Sensor.NAME, sensor.getName());
-            rowData.put(Magnetometer_Sensor.POWER_MA, sensor.getPower());
-            rowData.put(Magnetometer_Sensor.RESOLUTION, sensor.getResolution());
-            rowData.put(Magnetometer_Sensor.TYPE, sensor.getType());
-            rowData.put(Magnetometer_Sensor.VENDOR, sensor.getVendor());
-            rowData.put(Magnetometer_Sensor.VERSION, sensor.getVersion());
+        Cursor sensorInfo = null;
+        try {
+            sensorInfo = getContentResolver().query(Magnetometer_Sensor.CONTENT_URI, null, null, null, null);
+            if (sensorInfo == null || !sensorInfo.moveToFirst()) {
+                ContentValues rowData = new ContentValues();
+                rowData.put(Magnetometer_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                rowData.put(Magnetometer_Sensor.TIMESTAMP, System.currentTimeMillis());
+                rowData.put(Magnetometer_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
+                rowData.put(Magnetometer_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
+                rowData.put(Magnetometer_Sensor.NAME, sensor.getName());
+                rowData.put(Magnetometer_Sensor.POWER_MA, sensor.getPower());
+                rowData.put(Magnetometer_Sensor.RESOLUTION, sensor.getResolution());
+                rowData.put(Magnetometer_Sensor.TYPE, sensor.getType());
+                rowData.put(Magnetometer_Sensor.VENDOR, sensor.getVendor());
+                rowData.put(Magnetometer_Sensor.VERSION, sensor.getVersion());
 
-            getContentResolver().insert(Magnetometer_Sensor.CONTENT_URI, rowData);
+                getContentResolver().insert(Magnetometer_Sensor.CONTENT_URI, rowData);
 
-            if (Aware.DEBUG) Log.d(TAG, "Magnetometer sensor: " + rowData.toString());
+                if (Aware.DEBUG) Log.d(TAG, "Magnetometer sensor: " + rowData.toString());
+            }
+        } finally {
+            if (sensorInfo != null && !sensorInfo.isClosed()) {
+                sensorInfo.close();
+            }
         }
-        if (sensorInfo != null && !sensorInfo.isClosed()) sensorInfo.close();
     }
 
     @Override

@@ -918,41 +918,48 @@ public class Applications extends AccessibilityService {
 
                         String appName = (appInfo != null) ? (String) packageManager.getApplicationLabel(appInfo) : "";
 
-                        Cursor appUnclosed = getContentResolver().query(Applications_History.CONTENT_URI, null, Applications_History.PACKAGE_NAME + " LIKE '%" + app.processName + "%' AND " + Applications_History.PROCESS_ID + "=" + app.pid + " AND " + Applications_History.END_TIMESTAMP + "=0", null, null);
-                        if (appUnclosed == null || !appUnclosed.moveToFirst()) {
-                            ContentValues rowData = new ContentValues();
-                            rowData.put(Applications_History.TIMESTAMP, System.currentTimeMillis());
-                            rowData.put(Applications_History.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-                            rowData.put(Applications_History.PACKAGE_NAME, app.processName);
-                            rowData.put(Applications_History.APPLICATION_NAME, appName);
-                            rowData.put(Applications_History.PROCESS_IMPORTANCE, app.importance);
-                            rowData.put(Applications_History.PROCESS_ID, app.pid);
-                            rowData.put(Applications_History.END_TIMESTAMP, 0);
-                            rowData.put(Applications_History.IS_SYSTEM_APP, isSystemPackage(appPkg));
-                            try {
-                                if (awareSensor != null) awareSensor.onBackground(rowData);
-                                getContentResolver().insert(Applications_History.CONTENT_URI, rowData);
-                            } catch (SQLiteException e) {
-                                if (DEBUG) Log.d(TAG, e.getMessage());
-                            } catch (SQLException e) {
-                                if (DEBUG) Log.d(TAG, e.getMessage());
+                        Cursor appUnclosed = null;
+                        try {
+                            appUnclosed = getContentResolver().query(Applications_History.CONTENT_URI, null, Applications_History.PACKAGE_NAME + " LIKE '%" + app.processName + "%' AND " + Applications_History.PROCESS_ID + "=" + app.pid + " AND " + Applications_History.END_TIMESTAMP + "=0", null, null);
+                            if (appUnclosed == null || !appUnclosed.moveToFirst()) {
+                                ContentValues rowData = new ContentValues();
+                                rowData.put(Applications_History.TIMESTAMP, System.currentTimeMillis());
+                                rowData.put(Applications_History.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                                rowData.put(Applications_History.PACKAGE_NAME, app.processName);
+                                rowData.put(Applications_History.APPLICATION_NAME, appName);
+                                rowData.put(Applications_History.PROCESS_IMPORTANCE, app.importance);
+                                rowData.put(Applications_History.PROCESS_ID, app.pid);
+                                rowData.put(Applications_History.END_TIMESTAMP, 0);
+                                rowData.put(Applications_History.IS_SYSTEM_APP, isSystemPackage(appPkg));
+                                try {
+                                    if (awareSensor != null) awareSensor.onBackground(rowData);
+                                    getContentResolver().insert(Applications_History.CONTENT_URI, rowData);
+                                } catch (SQLiteException e) {
+                                    if (DEBUG) Log.d(TAG, e.getMessage());
+                                } catch (SQLException e) {
+                                    if (DEBUG) Log.d(TAG, e.getMessage());
+                                }
+                            } else if (appUnclosed.getInt(appUnclosed.getColumnIndex(Applications_History.PROCESS_IMPORTANCE)) != app.importance) {
+                                //Close last importance
+                                ContentValues rowData = new ContentValues();
+                                rowData.put(Applications_History.END_TIMESTAMP, System.currentTimeMillis());
+                                try {
+                                    getContentResolver().update(Applications_History.CONTENT_URI, rowData, Applications_History._ID + "=" + appUnclosed.getInt(appUnclosed.getColumnIndex(Applications_History._ID)), null);
+                                } catch (SQLiteException e) {
+                                    if (DEBUG) Log.d(TAG, e.getMessage());
+                                } catch (SQLException e) {
+                                    if (DEBUG) Log.d(TAG, e.getMessage());
+                                }
                             }
-                        } else if (appUnclosed.getInt(appUnclosed.getColumnIndex(Applications_History.PROCESS_IMPORTANCE)) != app.importance) {
-                            //Close last importance
-                            ContentValues rowData = new ContentValues();
-                            rowData.put(Applications_History.END_TIMESTAMP, System.currentTimeMillis());
-                            try {
-                                getContentResolver().update(Applications_History.CONTENT_URI, rowData, Applications_History._ID + "=" + appUnclosed.getInt(appUnclosed.getColumnIndex(Applications_History._ID)), null);
-                            } catch (SQLiteException e) {
-                                if (DEBUG) Log.d(TAG, e.getMessage());
-                            } catch (SQLException e) {
-                                if (DEBUG) Log.d(TAG, e.getMessage());
+                        } finally {
+                            if (appUnclosed != null && !appUnclosed.isClosed()) {
+                                appUnclosed.close();
                             }
 
                             if (!appUnclosed.isClosed()) appUnclosed.close();
 
                             //Insert new importance
-                            rowData = new ContentValues();
+                            ContentValues rowData = new ContentValues();
                             rowData.put(Applications_History.TIMESTAMP, System.currentTimeMillis());
                             rowData.put(Applications_History.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
                             rowData.put(Applications_History.PACKAGE_NAME, app.processName);
@@ -976,8 +983,9 @@ public class Applications extends AccessibilityService {
                 }
 
                 //Close open sync_applications that are not running anymore
+                Cursor appsOpened = null;
                 try {
-                    Cursor appsOpened = getContentResolver().query(Applications_History.CONTENT_URI, null, Applications_History.END_TIMESTAMP + "=0", null, null);
+                    appsOpened = getContentResolver().query(Applications_History.CONTENT_URI, null, Applications_History.END_TIMESTAMP + "=0", null, null);
                     if (appsOpened != null && appsOpened.moveToFirst()) {
                         do {
                             if (!exists(runningApps, appsOpened)) {
@@ -993,9 +1001,12 @@ public class Applications extends AccessibilityService {
                             }
                         } while (appsOpened.moveToNext());
                     }
-                    if (appsOpened != null && !appsOpened.isClosed()) appsOpened.close();
                 } catch (IllegalStateException | SQLiteException e) {
                     if (DEBUG) Log.e(TAG, e.toString());
+                } finally {
+                    if (appsOpened != null && !appsOpened.isClosed()) {
+                        appsOpened.close();
+                    }
                 }
 
                 Intent statsUpdated = new Intent(ACTION_AWARE_APPLICATIONS_HISTORY);

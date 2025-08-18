@@ -79,10 +79,10 @@ public class Jdbc {
             Log.i(TAG, "Connected to remote database...");
 
             if (config_without_password == false){
-                Log.i(TAG, "No input password. Default password: " + password);
+                Log.i(TAG, "No input password. Using default password.");
                 connection = DriverManager.getConnection(connectionUrl, username, password);
             }else{
-                Log.i(TAG, "Input password needed: " + input_password);
+                Log.i(TAG, "Input password needed.");
                 connection = DriverManager.getConnection(connectionUrl, username, input_password);
             }
 

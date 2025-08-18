@@ -209,25 +209,31 @@ public class Rotation extends Aware_Sensor implements SensorEventListener {
     }
 
     private void saveSensorDevice(Sensor sensor) {
-        Cursor sensorInfo = getContentResolver().query(Rotation_Sensor.CONTENT_URI, null, null, null, null);
-        if (sensorInfo == null || !sensorInfo.moveToFirst()) {
-            ContentValues rowData = new ContentValues();
-            rowData.put(Rotation_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-            rowData.put(Rotation_Sensor.TIMESTAMP, System.currentTimeMillis());
-            rowData.put(Rotation_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
-            rowData.put(Rotation_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
-            rowData.put(Rotation_Sensor.NAME, sensor.getName());
-            rowData.put(Rotation_Sensor.POWER_MA, sensor.getPower());
-            rowData.put(Rotation_Sensor.RESOLUTION, sensor.getResolution());
-            rowData.put(Rotation_Sensor.TYPE, sensor.getType());
-            rowData.put(Rotation_Sensor.VENDOR, sensor.getVendor());
-            rowData.put(Rotation_Sensor.VERSION, sensor.getVersion());
+        Cursor sensorInfo = null;
+        try {
+            sensorInfo = getContentResolver().query(Rotation_Sensor.CONTENT_URI, null, null, null, null);
+            if (sensorInfo == null || !sensorInfo.moveToFirst()) {
+                ContentValues rowData = new ContentValues();
+                rowData.put(Rotation_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                rowData.put(Rotation_Sensor.TIMESTAMP, System.currentTimeMillis());
+                rowData.put(Rotation_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
+                rowData.put(Rotation_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
+                rowData.put(Rotation_Sensor.NAME, sensor.getName());
+                rowData.put(Rotation_Sensor.POWER_MA, sensor.getPower());
+                rowData.put(Rotation_Sensor.RESOLUTION, sensor.getResolution());
+                rowData.put(Rotation_Sensor.TYPE, sensor.getType());
+                rowData.put(Rotation_Sensor.VENDOR, sensor.getVendor());
+                rowData.put(Rotation_Sensor.VERSION, sensor.getVersion());
 
-            getContentResolver().insert(Rotation_Sensor.CONTENT_URI, rowData);
+                getContentResolver().insert(Rotation_Sensor.CONTENT_URI, rowData);
 
-            if (Aware.DEBUG) Log.d(TAG, "Rotation sensor info: " + rowData.toString());
+                if (Aware.DEBUG) Log.d(TAG, "Rotation sensor info: " + rowData.toString());
+            }
+        } finally {
+            if (sensorInfo != null && !sensorInfo.isClosed()) {
+                sensorInfo.close();
+            }
         }
-        if (sensorInfo != null && !sensorInfo.isClosed()) sensorInfo.close();
     }
 
     @Override

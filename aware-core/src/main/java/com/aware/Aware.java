@@ -1817,50 +1817,55 @@ public class Aware extends Service {
                             return;
                         }
 
-                        Cursor dbStudy = Aware.getStudy(getApplicationContext(), full_url);
-                        if (Aware.DEBUG)
-                            Log.d(Aware.TAG, DatabaseUtils.dumpCursorToString(dbStudy));
-
-                        if (dbStudy == null || !dbStudy.moveToFirst()) {
-                            ContentValues studyData = new ContentValues();
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_JOINED, System.currentTimeMillis());
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_KEY, study_id);
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_API, study_api_key);
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_URL, full_url);
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_PI, studyInfo.getString("researcher_first") + " " + studyInfo.getString("researcher_last") + "\nContact: " + studyInfo.getString("researcher_contact"));
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, study_config.toString());
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_TITLE, studyInfo.getString("study_name"));
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION, studyInfo.getString("study_description"));
-
-                            getContentResolver().insert(Aware_Provider.Aware_Studies.CONTENT_URI, studyData);
-
+                        Cursor dbStudy = null;
+                        try {
+                            dbStudy = Aware.getStudy(getApplicationContext(), full_url);
                             if (Aware.DEBUG)
-                                Log.d(Aware.TAG, "New study data: " + studyData.toString());
+                                Log.d(Aware.TAG, DatabaseUtils.dumpCursorToString(dbStudy));
 
-                        } else {
-                            ContentValues studyData = new ContentValues();
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_JOINED, System.currentTimeMillis());
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_EXIT, 0);
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_KEY, study_id);
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_API, study_api_key);
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_URL, full_url);
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_PI, studyInfo.getString("researcher_first") + " " + studyInfo.getString("researcher_last") + "\nContact: " + studyInfo.getString("researcher_contact"));
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, study_config.toString());
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_TITLE, studyInfo.getString("study_name"));
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION, studyInfo.getString("study_description"));
+                            if (dbStudy == null || !dbStudy.moveToFirst()) {
+                                ContentValues studyData = new ContentValues();
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_JOINED, System.currentTimeMillis());
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_KEY, study_id);
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_API, study_api_key);
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_URL, full_url);
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_PI, studyInfo.getString("researcher_first") + " " + studyInfo.getString("researcher_last") + "\nContact: " + studyInfo.getString("researcher_contact"));
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, study_config.toString());
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_TITLE, studyInfo.getString("study_name"));
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION, studyInfo.getString("study_description"));
 
-                            getContentResolver().insert(Aware_Provider.Aware_Studies.CONTENT_URI, studyData);
+                                getContentResolver().insert(Aware_Provider.Aware_Studies.CONTENT_URI, studyData);
 
-                            if (Aware.DEBUG) {
-                                Log.d(Aware.TAG, "Rejoined study data: " + studyData.toString());
+                                if (Aware.DEBUG)
+                                    Log.d(Aware.TAG, "New study data: " + studyData.toString());
+
+                            } else {
+                                ContentValues studyData = new ContentValues();
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_JOINED, System.currentTimeMillis());
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_EXIT, 0);
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_KEY, study_id);
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_API, study_api_key);
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_URL, full_url);
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_PI, studyInfo.getString("researcher_first") + " " + studyInfo.getString("researcher_last") + "\nContact: " + studyInfo.getString("researcher_contact"));
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, study_config.toString());
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_TITLE, studyInfo.getString("study_name"));
+                                studyData.put(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION, studyInfo.getString("study_description"));
+
+                                getContentResolver().insert(Aware_Provider.Aware_Studies.CONTENT_URI, studyData);
+
+                                if (Aware.DEBUG) {
+                                    Log.d(Aware.TAG, "Rejoined study data: " + studyData.toString());
+                                }
+                            }
+                        } finally {
+                            if (dbStudy != null && !dbStudy.isClosed()) {
+                                dbStudy.close();
                             }
                         }
-
-                        if (dbStudy != null && !dbStudy.isClosed()) dbStudy.close();
 
                         //Apply study settings
                         JSONArray plugins = new JSONArray();
