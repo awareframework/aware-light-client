@@ -154,17 +154,21 @@ public class ScreenShot extends Aware_Sensor {
             }
         }
 
-        int resultCode = intent.getIntExtra(MEDIA_PROJECTION_RESULT_CODE, Activity.RESULT_CANCELED);
-        Intent data = intent.getParcelableExtra(MEDIA_PROJECTION_RESULT_DATA);
+        int resultCode = Activity.RESULT_CANCELED;
+        Intent data = null;
+        
+        if (intent != null) {
+            resultCode = intent.getIntExtra(MEDIA_PROJECTION_RESULT_CODE, Activity.RESULT_CANCELED);
+            data = intent.getParcelableExtra(MEDIA_PROJECTION_RESULT_DATA);
+            capture_delay = intent.getIntExtra(CAPTURE_TIME_INTERVAL, capture_delay);
+            compressionRate = intent.getIntExtra(COMPRESS_RATE, compressionRate);
+            saveToLocalStorage = intent.getBooleanExtra(STATUS_SCREENSHOT_LOCAL_STORAGE, saveToLocalStorage);
+        }
 
         if (resultCode != Activity.RESULT_CANCELED && data != null) {
             mediaProjectionResultCode = resultCode;
             mediaProjectionResultData = data;
         }
-
-        capture_delay = intent.getIntExtra(CAPTURE_TIME_INTERVAL, capture_delay);
-        compressionRate = intent.getIntExtra(COMPRESS_RATE, compressionRate);
-        saveToLocalStorage = intent.getBooleanExtra(STATUS_SCREENSHOT_LOCAL_STORAGE, saveToLocalStorage);
 
         if (mediaProjectionResultCode != 0 && mediaProjectionResultData != null) {
             startForegroundService(mediaProjectionResultCode, mediaProjectionResultData);
@@ -475,26 +479,33 @@ public class ScreenShot extends Aware_Sensor {
                 bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
                 bitmap.copyPixelsFromBuffer(buffer);
 
-                if (saveToLocalStorage) {
-                    // Save on background thread to avoid blocking
-                    final Bitmap bitmapToSave = bitmap;
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            saveBitmap(bitmapToSave, timestamp);
-                            Log.d(TAG, "Screenshot saved to local storage");
-                        }
-                    }).start();
-                }
-
                 Log.d(TAG, "Storing screenshot metadata");
                 byte[] imageData = convertBitmapToByteArray(bitmap);
                 storeScreenshotMetadata(imageData, timestamp);
 
+                if (saveToLocalStorage) {
+                    // Create a copy for background thread to avoid race condition
+                    final Bitmap bitmapCopy = bitmap.copy(bitmap.getConfig(), false);
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                saveBitmap(bitmapCopy, timestamp);
+                                Log.d(TAG, "Screenshot saved to local storage");
+                            } finally {
+                                // Recycle the copy when done
+                                if (bitmapCopy != null && !bitmapCopy.isRecycled()) {
+                                    bitmapCopy.recycle();
+                                }
+                            }
+                        }
+                    }).start();
+                }
+
             } catch (Exception e) {
                 Log.e(TAG, "Error processing image", e);
             } finally {
-                // Always recycle bitmap to prevent memory leak
+                // Always recycle original bitmap to prevent memory leak
                 if (bitmap != null && !bitmap.isRecycled()) {
                     bitmap.recycle();
                 }
