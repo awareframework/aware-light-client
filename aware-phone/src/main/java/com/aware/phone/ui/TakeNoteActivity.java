@@ -14,6 +14,7 @@ import android.text.TextWatcher;
 import android.view.View;
 
 import android.widget.EditText;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -29,6 +30,7 @@ import com.aware.providers.Notes_Provider;
 public class TakeNoteActivity extends AppCompatActivity {
     private EditText noteEditText;
     private TextView charCountText;
+    private ScrollView scrollView;
     private final int MAX_CHARS = 10000;
 
     @SuppressLint("MissingInflatedId")
@@ -39,6 +41,7 @@ public class TakeNoteActivity extends AppCompatActivity {
 
         noteEditText = findViewById(R.id.note_edit_text);
         charCountText = findViewById(R.id.char_count_text);
+        scrollView = findViewById(R.id.scroll_view);
 
         findViewById(R.id.save_button).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -69,14 +72,47 @@ public class TakeNoteActivity extends AppCompatActivity {
             @Override
             public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
                 charCountText.setText(charSequence.length() + "/" + MAX_CHARS);
+
+                // Only auto-scroll if cursor is at or near the end of the text
+                int cursorPosition = noteEditText.getSelectionStart();
+                int textLength = charSequence.length();
+                if (cursorPosition >= textLength) {
+                    scrollToBottom();
+                }
             }
 
             @Override
             public void afterTextChanged(Editable editable) {}
-    });
+        });
 
+        // Auto-scroll to bottom when EditText gains focus (keyboard appears)
+        noteEditText.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if (hasFocus) {
+                    // Post the scroll action to ensure layout is complete
+                    scrollView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            scrollToBottom();
+                        }
+                    });
+                }
+            }
+        });
+    }
 
-
+    private void scrollToBottom() {
+        scrollView.post(new Runnable() {
+            @Override
+            public void run() {
+                // Scroll to the absolute bottom to ensure buttons are visible
+                View lastChild = scrollView.getChildAt(scrollView.getChildCount() - 1);
+                int bottom = lastChild.getBottom() + scrollView.getPaddingBottom();
+                int delta = bottom - (scrollView.getScrollY() + scrollView.getHeight());
+                scrollView.smoothScrollBy(0, delta);
+            }
+        });
     }
 
     private void saveNote() {
