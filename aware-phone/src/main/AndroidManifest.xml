@@ -107,7 +107,8 @@
         <activity
             android:name=".ui.TakeNoteActivity"
             android:label="Take Note"
-            android:exported="false">
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize">
         </activity>
         <receiver
             android:name="com.aware.Aware$AndroidPackageMonitor"

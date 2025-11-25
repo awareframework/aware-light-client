@@ -1,4 +1,7 @@
 Change log for AWARE
+4.7.4.beta
+- Fix note taking button display UI
+
 4.7.3.beta
 - add column for record bluetooth connection status
 
