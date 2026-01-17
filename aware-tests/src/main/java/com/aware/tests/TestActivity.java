@@ -73,6 +73,14 @@ public class TestActivity extends Activity {
 //            }
 //        });
 
+        Button btnTimeLatency = findViewById(R.id.btn_test_timelatency);
+        btnTimeLatency.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                TestTimeLatency testTimeLatency = new TestTimeLatency();
+                testTimeLatency.test(TestActivity.this);
+            }
+        });
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_STORAGE);
         }
