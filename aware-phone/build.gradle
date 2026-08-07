@@ -19,6 +19,13 @@ android {
         minSdkVersion minimum_sdk
         multiDexEnabled true
 
+        //only native code is zbar's libzbarjni.so + libiconv.so (~1MB per abi), so drop
+        //the abis the aar still ships that nothing can run: armeabi/mips/mips64, plus
+        //32-bit x86 (no phones since ~2016; emulators and ChromeOS are x86_64)
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'
+        }
+
         //AWARE core sensors SyncAdapters
         resValue "string", "provider_accelerometer", android.defaultConfig.applicationId + ".provider.accelerometer"
         resValue "string", "provider_applications", android.defaultConfig.applicationId + ".provider.applications"
@@ -70,10 +77,10 @@ android {
 //            reset()
 //            include "mdpi", "hdpi", "ldpi", "xxhdpi", "xxxhdpi"
 //        }
+        //splits traded 2MB per download for making participants pick the right
+        //file out of five; one universal apk is the better deal at this size
         abi {
-            enable true
-            reset()
-            include 'armeabi', 'x86',"x86_64", 'armeabi-v7a', 'arm64-v8a'
+            enable false
         }
     }
 

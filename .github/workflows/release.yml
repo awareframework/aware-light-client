@@ -19,7 +19,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Parse and validate version
         id: ver
@@ -48,7 +48,7 @@ jobs:
           echo "Building $RAW_VERSION (versionCode=$VERSION_CODE, prerelease=$PRERELEASE)"
 
       # sdkmanager (cmdline-tools >= 12) requires JDK 17 -> install it first, SDK setup only
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -56,21 +56,24 @@ jobs:
       # Runner images dropped SDK < 34 and no longer expose sdkmanager on PATH
       # -> this action installs cmdline-tools, accepts licenses, installs packages
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-28 build-tools;28.0.3'
 
       # Gradle 6.5 only runs on JDK 8-14 -> switch JAVA_HOME to 11 for the build
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '11'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           # committed wrapper jars (same file copied into all 8 modules) predate
           # gradle's official checksum list; skip validation, keep caching
           validate-wrappers: false
+          # v6 defaults to 'enhanced' (Gradle's commercial caching service);
+          # stay on the plain GitHub Actions cache
+          cache-provider: basic
 
       - name: Decode release keystore
         env:
@@ -93,28 +96,35 @@ jobs:
           keyPassword: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew :aware-phone:assembleRelease --no-daemon --stacktrace
 
-      - name: Verify 5 signed APKs
+      - name: Verify signed universal APK
         run: |
           ls -l aware-phone/build/outputs/apk/release/
           if ls aware-phone/build/outputs/apk/release/*unsigned* >/dev/null 2>&1; then
-            echo "::error::Unsigned APKs produced - signing env vars were not picked up"
+            echo "::error::Unsigned APK produced - signing env vars were not picked up"
             exit 1
           fi
           count=$(ls aware-phone/build/outputs/apk/release/*.apk | wc -l)
-          if [[ "$count" -ne 5 ]]; then
-            echo "::error::Expected 5 ABI-split APKs, found $count"
+          if [[ "$count" -ne 1 ]]; then
+            echo "::error::Expected 1 universal APK, found $count"
             exit 1
           fi
+          # guard against the abiFilters in aware-phone/build.gradle silently regressing
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            if ! unzip -l aware-phone/build/outputs/apk/release/*.apk | grep -q "lib/$abi/"; then
+              echo "::error::APK is missing native libs for $abi"
+              exit 1
+            fi
+          done
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aware-light-${{ steps.ver.outputs.version_name }}
           path: aware-phone/build/outputs/apk/release/*.apk
 
       - name: Create GitHub Release
         if: github.event_name == 'push'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: ${{ steps.ver.outputs.version_name }}
           prerelease: ${{ steps.ver.outputs.prerelease == 'true' }}
