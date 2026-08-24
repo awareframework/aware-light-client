@@ -1,5 +1,6 @@
 package com.aware.phone.ui.dialogs;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -8,6 +9,7 @@ import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -16,12 +18,18 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
+import androidx.core.content.PermissionChecker;
+
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
 import com.aware.phone.R;
 import com.aware.phone.ui.Aware_Join_Study;
+import com.aware.phone.ui.Aware_QRCode;
 import com.aware.phone.ui.SensorConsentActivity;
+import com.aware.ui.PermissionsHandler;
 import com.aware.utils.StudyUtils;
+
+import java.util.ArrayList;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -63,6 +71,14 @@ public class JoinStudyDialog extends DialogFragment {
             etPrefill.setText(prefillUrl);
         }
 
+        dialogView.findViewById(R.id.btn_scan_study_qr).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                JoinStudyDialog.this.dismiss();
+                openScanner();
+            }
+        });
+
         builder.setView(dialogView);
         builder.setTitle("Enter URL for study")
                 .setPositiveButton("Join", new DialogInterface.OnClickListener() {
@@ -84,6 +100,39 @@ public class JoinStudyDialog extends DialogFragment {
 
     public void showDialog() {
         this.show(mActivity.getFragmentManager(), "dialog");
+    }
+
+    /**
+     * Open the scanner, asking for the camera at the moment the participant chooses to
+     * scan.
+     *
+     * The permission is requested here rather than at install time because scanning is
+     * one of two ways to join: a participant who prefers to paste the link is never
+     * asked for the camera at all. {@link PermissionsHandler} returns to the scanner
+     * once the grant is settled, so both branches arrive in the same place.
+     */
+    private void openScanner() {
+        String scanner = mActivity.getPackageName() + "/" + mActivity.getPackageName()
+                + ".ui.Aware_QRCode";
+        boolean granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                || PermissionChecker.checkSelfPermission(mActivity, Manifest.permission.CAMERA)
+                        == PermissionChecker.PERMISSION_GRANTED;
+
+        if (granted) {
+            Intent qrcode = new Intent(mActivity, Aware_QRCode.class);
+            qrcode.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+            mActivity.startActivity(qrcode);
+            return;
+        }
+
+        ArrayList<String> permission = new ArrayList<>();
+        permission.add(Manifest.permission.CAMERA);
+
+        Intent permissions = new Intent(mActivity, PermissionsHandler.class);
+        permissions.putExtra(PermissionsHandler.EXTRA_REQUIRED_PERMISSIONS, permission);
+        permissions.putExtra(PermissionsHandler.EXTRA_REDIRECT_ACTIVITY, scanner);
+        permissions.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        mActivity.startActivity(permissions);
     }
 
     /**

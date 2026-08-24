@@ -34,6 +34,7 @@
     <string name="aware_join_study_link">Join Study by link</string>
     <string name="aware_team">Team</string>
     <string name="aware_qrcode">QRCode</string>
+    <string name="join_study_scan_qr">Or scan the study QR code</string>
     <string name="aware_sync">Sync</string>
     <string name="aware_study">Study</string>
     <string name="aware_esm_other">Other</string>
