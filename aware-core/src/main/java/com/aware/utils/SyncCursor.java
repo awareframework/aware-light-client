@@ -38,18 +38,47 @@ public final class SyncCursor {
         return null;
     }
 
+    /** Whether a table is ordered by the instant its rows finished rather than by row id. */
+    public static boolean pagesByCompletion(String[] columns) {
+        return completionColumn(columns) != null;
+    }
+
+    /**
+     * The column a table's rows are ordered by: the instant they finished where the table has one,
+     * and the row id otherwise.
+     */
+    public static String orderColumn(String[] columns) {
+        String completion = completionColumn(columns);
+        return completion == null ? ROW_ID : completion;
+    }
+
     /**
      * The rows one batch takes: those past the cursor, and finished where the table says so.
      *
+     * A table whose rows finish after they are stored is ordered by the instant they finished, and
+     * the cursor is the pair (that instant, row id). A row is past the cursor when it finished later,
+     * or finished in the same millisecond and sits after it in insertion order. Every write of a
+     * completion column stamps the moment of completion, so a row that finishes now finishes after
+     * every row already uploaded and is offered on the next sync however long it ran.
+     *
      * @param columns        the table's column names
+     * @param cursorValue    the ordering value the cursor stands at
      * @param cursorId       row id of the last acknowledged row; 0 offers the table from its start
      * @param studyCondition additional clause restricting rows to the study, or null
      */
-    public static String selection(String[] columns, long cursorId, String studyCondition) {
-        StringBuilder selection = new StringBuilder(ROW_ID + " > " + cursorId);
-
+    public static String selection(String[] columns, long cursorValue, long cursorId,
+                                   String studyCondition) {
+        StringBuilder selection = new StringBuilder();
         String completion = completionColumn(columns);
-        if (completion != null) selection.append(" AND ").append(completion).append(" != 0");
+
+        if (completion == null) {
+            selection.append(ROW_ID).append(" > ").append(cursorId);
+        } else {
+            selection.append(completion).append(" != 0")
+                    .append(" AND (").append(completion).append(" > ").append(cursorValue)
+                    .append(" OR (").append(completion).append(" = ").append(cursorValue)
+                    .append(" AND ").append(ROW_ID).append(" > ").append(cursorId).append("))");
+        }
 
         if (studyCondition != null) selection.append(studyCondition);
 
@@ -57,39 +86,33 @@ public final class SyncCursor {
     }
 
     /**
-     * One batch of rows, read in insertion order from the cursor forward.
+     * One batch of rows, read from the cursor forward in the order the table is paged by.
      *
+     * @param columns   the table's column names
      * @param batchSize rows the batch may carry
      */
-    public static String order(int batchSize) {
-        return ROW_ID + " ASC LIMIT " + batchSize;
-    }
-
-    /**
-     * The cursor after a batch.
-     *
-     * Monotonic: the cursor holds the highest acknowledged row id, so a batch that carried fewer
-     * rows than it read leaves the position where the acknowledged rows end.
-     *
-     * @param cursorId          the cursor the batch started from
-     * @param acknowledgedMaxId highest row id the server acknowledged in that batch
-     */
-    public static long advance(long cursorId, long acknowledgedMaxId) {
-        return Math.max(cursorId, acknowledgedMaxId);
+    public static String order(String[] columns, int batchSize) {
+        String completion = completionColumn(columns);
+        if (completion == null) return ROW_ID + " ASC LIMIT " + batchSize;
+        return completion + " ASC, " + ROW_ID + " ASC LIMIT " + batchSize;
     }
 
     /**
      * Whether a table's cursor is still to be derived from a timestamp marker.
      *
      * A marker recording only how far a table was uploaded by capture time names a position the row
-     * id cursor can be seeded from, so an upload continues from there rather than offering the
-     * table from its start again.
+     * id cursor can be seeded from, so an upload continues from there rather than offering the table
+     * from its start again. The translation holds for a table paged by row id, where capture order
+     * and insertion order agree. A table paged by completion is ordered on an axis that marker says
+     * nothing about, so its cursor opens at the start of that axis and the rows already held are
+     * offered once more.
      *
+     * @param columns         the table's column names
      * @param cursorId        the stored row id cursor
      * @param markerTimestamp the stored timestamp marker
      */
-    public static boolean needsSeeding(long cursorId, long markerTimestamp) {
-        return cursorId <= 0 && markerTimestamp > 0;
+    public static boolean needsSeeding(String[] columns, long cursorId, long markerTimestamp) {
+        return !pagesByCompletion(columns) && cursorId <= 0 && markerTimestamp > 0;
     }
 
     private static boolean contains(String[] columns, String name) {
