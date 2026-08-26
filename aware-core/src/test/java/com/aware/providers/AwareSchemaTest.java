@@ -42,15 +42,20 @@ public class AwareSchemaTest {
     }
 
     @Test
-    public void theDeviceTableCarriesNoColumnThatReportsNothing() {
+    public void theDeviceTableCarriesNoUnsupportedHardwareColumns() {
         // Each of these either stopped being reported by Android, or repeated what another column
         // already said. A column reinstated here reaches the research database as a column the remote
         // table does not have, which fails the whole upload batch for aware_device.
         String schema = schemaOf("aware_device");
-        for (String column : new String[]{"brand", "serial", "release_type", "label"}) {
+        for (String column : new String[]{"brand", "serial", "release_type"}) {
             assertFalse(column + " is declared in aware_device again",
                     schema.contains(column + " text"));
         }
+    }
+
+    @Test
+    public void theDeviceTableCarriesTheParticipantFacingLabel() {
+        assertTrue(schemaOf("aware_device").contains(Aware_Device.LABEL + " text"));
     }
 
     @Test

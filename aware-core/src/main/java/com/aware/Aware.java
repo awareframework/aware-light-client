@@ -691,8 +691,10 @@ public class Aware extends Service {
      */
     private void get_device_info() {
         String device_id = Aware.getDeviceID(this);
+        String currentLabel = Aware.getSetting(this, Aware_Preferences.DEVICE_LABEL);
         Map<String, String> current = deviceSnapshot();
         Map<String, String> stored = null;
+        String storedLabel = null;
 
         Cursor storedRow = getContentResolver().query(Aware_Device.CONTENT_URI, null,
                 Aware_Device.DEVICE_ID + "=?", new String[]{device_id}, null);
@@ -702,14 +704,17 @@ public class Aware extends Service {
                 int index = storedRow.getColumnIndex(column);
                 stored.put(column, index < 0 ? null : storedRow.getString(index));
             }
+            int labelIndex = storedRow.getColumnIndex(Aware_Device.LABEL);
+            storedLabel = labelIndex < 0 ? null : storedRow.getString(labelIndex);
         }
         if (storedRow != null && !storedRow.isClosed()) storedRow.close();
 
-        if (DeviceFacts.unchanged(stored, current)) return;
+        if (DeviceFacts.unchanged(stored, current) && currentLabel.equals(storedLabel)) return;
 
         ContentValues rowData = new ContentValues();
         rowData.put(Aware_Device.TIMESTAMP, System.currentTimeMillis());
         rowData.put(Aware_Device.DEVICE_ID, device_id);
+        rowData.put(Aware_Device.LABEL, currentLabel);
         for (Map.Entry<String, String> fact : current.entrySet()) {
             rowData.put(fact.getKey(), fact.getValue());
         }
@@ -1590,6 +1595,33 @@ public class Aware extends Service {
                 .edit().putString(DeviceId.MIRROR_KEY, device_id).apply();
     }
 
+    /** Keeps the participant's alternative device name in the uploaded device profile. */
+    private static void updateDeviceLabel(Context context, String key, Object value) {
+        if (!key.equals(Aware_Preferences.DEVICE_LABEL)) return;
+
+        String deviceId = getSetting(context, Aware_Preferences.DEVICE_ID);
+        if (deviceId.length() == 0) return;
+
+        String label = value == null ? "" : value.toString();
+        Cursor device = context.getContentResolver().query(Aware_Device.CONTENT_URI,
+                new String[]{Aware_Device.LABEL}, Aware_Device.DEVICE_ID + "=?",
+                new String[]{deviceId}, null);
+        String stored = null;
+        if (device != null && device.moveToFirst()) {
+            int labelIndex = device.getColumnIndex(Aware_Device.LABEL);
+            stored = labelIndex < 0 ? null : device.getString(labelIndex);
+        }
+        if (device != null && !device.isClosed()) device.close();
+        if (label.equals(stored)) return;
+
+        ContentValues update = new ContentValues();
+        update.put(Aware_Device.LABEL, label);
+        // Upload paging is timestamp-based, so a label-only change must advance it too.
+        update.put(Aware_Device.TIMESTAMP, System.currentTimeMillis());
+        context.getContentResolver().update(Aware_Device.CONTENT_URI, update,
+                Aware_Device.DEVICE_ID + "=?", new String[]{deviceId});
+    }
+
     /**
      * Insert / Update settings of the framework
      *
@@ -1681,6 +1713,7 @@ public class Aware extends Service {
             }
         }
         if (qry != null && !qry.isClosed()) qry.close();
+        updateDeviceLabel(context, key, value);
     }
 
     /**
@@ -1744,6 +1777,7 @@ public class Aware extends Service {
             }
         }
         if (qry != null && !qry.isClosed()) qry.close();
+        updateDeviceLabel(context, key, value);
     }
 
     /**

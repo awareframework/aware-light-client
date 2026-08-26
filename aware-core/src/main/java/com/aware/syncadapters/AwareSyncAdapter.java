@@ -745,10 +745,9 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
      * upload: the study enrolment, the defined schedulers, and the device profile.
      *
      * The device profile has to survive because the phone compares against its stored row to decide
-     * whether the device's facts have changed and a new row is warranted (see
-     * {@code Aware.get_device_info()}), and because the participant's device label is maintained by
-     * {@code UPDATE ... WHERE device_id LIKE} on that row. A locally deleted row makes the
-     * comparison find nothing and those updates match nothing.
+     * whether the device's facts or participant-facing label have changed (see
+     * {@code Aware.get_device_info()}). A locally deleted row makes the comparison find nothing and
+     * label updates match nothing.
      */
     private boolean isTableAllowedForMaintenance(String table_name) {
         return !table_name.equalsIgnoreCase("aware_studies")

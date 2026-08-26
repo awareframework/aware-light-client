@@ -28,7 +28,7 @@ import java.util.HashMap;
  */
 public class Aware_Provider extends ContentProvider {
 
-    public static final int DATABASE_VERSION = 19;
+    public static final int DATABASE_VERSION = 20;
 
     /**
      * AWARE framework content authority
@@ -73,6 +73,7 @@ public class Aware_Provider extends ContentProvider {
         public static final String PRODUCT = "product";
         public static final String RELEASE = "release";
         public static final String SDK = "sdk";
+        public static final String LABEL = "label";
     }
 
     /**
@@ -205,6 +206,7 @@ public class Aware_Provider extends ContentProvider {
                     + Aware_Device.PRODUCT + " text default '',"
                     + Aware_Device.RELEASE + " text default '',"
                     + Aware_Device.SDK + " text default '',"
+                    + Aware_Device.LABEL + " text default '',"
                     + "UNIQUE(" + Aware_Device.DEVICE_ID + ")",
 
             // Settings
@@ -476,6 +478,7 @@ public class Aware_Provider extends ContentProvider {
         deviceMap.put(Aware_Device.PRODUCT, Aware_Device.PRODUCT);
         deviceMap.put(Aware_Device.RELEASE, Aware_Device.RELEASE);
         deviceMap.put(Aware_Device.SDK, Aware_Device.SDK);
+        deviceMap.put(Aware_Device.LABEL, Aware_Device.LABEL);
 
         settingsMap = new HashMap<>();
         settingsMap.put(Aware_Settings.SETTING_ID, Aware_Settings.SETTING_ID);
