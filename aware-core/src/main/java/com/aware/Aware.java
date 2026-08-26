@@ -194,7 +194,7 @@ public class Aware extends Service {
     /**
      * Used on the scheduler class to define global schedules for AWARE, SYNC and SPACE MAINTENANCE actions
      */
-    //public static final String SCHEDULE_SYNC_DATA = "schedule_aware_sync_data";
+    public static final String SCHEDULE_SYNC_DATA = "schedule_aware_sync_data";
     public static final String SCHEDULE_STUDY_COMPLIANCE = "schedule_aware_study_compliance";
     public static final String SCHEDULE_KEEP_ALIVE = "schedule_aware_keep_alive";
     public static final String SCHEDULE_SYNC_CONFIG = "schedule_aware_sync_config";
@@ -1189,6 +1189,34 @@ public class Aware extends Service {
                         .setSyncAdapter(Aware.getAWAREAccount(this), Aware_Provider.getAuthority(this))
                         .setExtras(new Bundle()).build();
                 ContentResolver.requestSync(request);
+
+                // Set scheduler for syncing collected data
+                //
+                // The periodic sync requested above is a request the platform schedules at its own
+                // discretion, batching it into a maintenance window that a study's cadence has no
+                // say in. AWARE's own scheduler runs on the interval it is given, and the broadcast
+                // it sends reaches every running sensor and plugin, each of which asks for an
+                // expedited sync of the authority it owns. That is what puts a study's upload
+                // frequency in charge of when data leaves the phone.
+                try {
+                    Scheduler.Schedule syncData = Scheduler.getSchedule(this, Aware.SCHEDULE_SYNC_DATA);
+                    long syncFrequency = getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30);
+
+                    if (syncData != null && syncData.getInterval() != syncFrequency) {
+                        syncData.setInterval(syncFrequency);
+                        Scheduler.saveSchedule(this, syncData);
+                    }
+                    if (syncData == null) {
+                        syncData = new Scheduler.Schedule(Aware.SCHEDULE_SYNC_DATA);
+                        syncData.setInterval(syncFrequency)
+                                .setActionType(Scheduler.ACTION_TYPE_BROADCAST)
+                                .setActionIntentAction(Aware.ACTION_AWARE_SYNC_DATA);
+
+                        Scheduler.saveSchedule(this, syncData);
+                    }
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
 
                 // Set scheduler for syncing config data
                 try {
