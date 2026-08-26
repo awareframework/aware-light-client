@@ -44,6 +44,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private Context mContext;
 
     private HashMap<String, String> renamed_columns = new HashMap<>();
+    private List<String> metadataOnlyTrailingColumnDrops = new ArrayList<>();
 
     public DatabaseHelper(Context context, String database_name, CursorFactory cursor_factory, int database_version, String[] database_tables, String[] table_fields) {
         super(context, database_name, cursor_factory, database_version);
@@ -57,6 +58,19 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     public void setRenamedColumns(HashMap<String, String> renamed) {
         renamed_columns = renamed;
+    }
+
+    /**
+     * Allows a provider to remove known trailing columns without copying the entire table.
+     *
+     * SQLite records are self-describing. If columns are removed only from the end of a table,
+     * older records may safely retain those trailing values: SQLite ignores values beyond the
+     * table definition, while new records use the shorter definition. Updating sqlite_master is
+     * therefore a metadata-only operation. This is deliberately opt-in because it is safe only for
+     * trailing columns whose values no longer have meaning.
+     */
+    public void setMetadataOnlyTrailingColumnDrops(String... columns) {
+        metadataOnlyTrailingColumnDrops = new ArrayList<>(Arrays.asList(columns));
     }
 
     @Override
@@ -126,11 +140,30 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (DEBUG) Log.w(TAG, "Upgrading database: " + db.getPath());
 
+        boolean tableDefinitionRewritten = false;
+
         for (int i = 0; i < databaseTables.length; i++) {
             db.execSQL("CREATE TABLE IF NOT EXISTS " + databaseTables[i] + " (" + tableFields[i] + ");");
 
             //Modify existing tables if there are changes, while retaining old data. This also works for brand new tables, where nothing is changed.
             List<String> columns = getColumns(db, databaseTables[i]);
+            List<String> desiredColumns = declaredColumns(tableFields[i]);
+
+            if (!metadataOnlyTrailingColumnDrops.isEmpty()) {
+                // Providers opting into the metadata-only path use a version bump solely to drop
+                // a known trailing field. Do not rebuild their unchanged companion tables.
+                if (columns.equals(desiredColumns)) {
+                    createTimeDeviceIndex(db, i);
+                    continue;
+                }
+                if (isConfiguredTrailingColumnDrop(columns, desiredColumns,
+                        metadataOnlyTrailingColumnDrops)) {
+                    rewriteTableDefinition(db, databaseTables[i], tableFields[i]);
+                    tableDefinitionRewritten = true;
+                    createTimeDeviceIndex(db, i);
+                    continue;
+                }
+            }
 
             // An upgrade runs in a transaction, so an attempt that fails rolls back and leaves the
             // original table in place — but a temp_ table created outside that transaction's reach
@@ -163,7 +196,39 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.execSQL(String.format("INSERT INTO %s (%s) SELECT %s from temp_%s;", databaseTables[i], new_cols, cols, databaseTables[i]));
             db.execSQL("DROP TABLE temp_" + databaseTables[i] + ";");
         }
+
+        if (tableDefinitionRewritten) {
+            // Force SQLite and other connections to discard their cached copy of sqlite_master.
+            Cursor schemaVersion = db.rawQuery("PRAGMA schema_version", null);
+            int version = 0;
+            if (schemaVersion != null && schemaVersion.moveToFirst()) {
+                version = schemaVersion.getInt(0);
+            }
+            if (schemaVersion != null && !schemaVersion.isClosed()) schemaVersion.close();
+            db.execSQL("PRAGMA schema_version = " + (version + 1));
+        }
         db.setVersion(newVersion);
+    }
+
+    static boolean isConfiguredTrailingColumnDrop(List<String> existing,
+                                                   List<String> desired,
+                                                   List<String> allowedDrops) {
+        if (existing.size() <= desired.size()) return false;
+        if (!existing.subList(0, desired.size()).equals(desired)) return false;
+        for (String dropped : existing.subList(desired.size(), existing.size())) {
+            if (!allowedDrops.contains(dropped)) return false;
+        }
+        return true;
+    }
+
+    private static void rewriteTableDefinition(SQLiteDatabase db, String table, String fields) {
+        db.execSQL("PRAGMA writable_schema = ON");
+        try {
+            db.execSQL("UPDATE sqlite_master SET sql = ? WHERE type = 'table' AND name = ?",
+                    new Object[]{"CREATE TABLE " + table + " (" + fields + ")", table});
+        } finally {
+            db.execSQL("PRAGMA writable_schema = OFF");
+        }
     }
 
     /**

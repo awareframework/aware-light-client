@@ -28,7 +28,7 @@ import java.util.HashMap;
  */
 public class Linear_Accelerometer_Provider extends ContentProvider {
 
-    public static final int DATABASE_VERSION = 3;
+    public static final int DATABASE_VERSION = 4;
 
     /**
      * Authority of content provider
@@ -92,7 +92,6 @@ public class Linear_Accelerometer_Provider extends ContentProvider {
         public static final String VALUES_1 = "double_values_1";
         public static final String VALUES_2 = "double_values_2";
         public static final String ACCURACY = "accuracy";
-        public static final String LABEL = "label";
     }
 
     public static String DATABASE_NAME = "linear_accelerometer.db";
@@ -121,8 +120,7 @@ public class Linear_Accelerometer_Provider extends ContentProvider {
                     + Linear_Accelerometer_Data.VALUES_0 + " real default 0,"
                     + Linear_Accelerometer_Data.VALUES_1 + " real default 0,"
                     + Linear_Accelerometer_Data.VALUES_2 + " real default 0,"
-                    + Linear_Accelerometer_Data.ACCURACY + " integer default 0,"
-                    + Linear_Accelerometer_Data.LABEL + " text default ''"};
+                    + Linear_Accelerometer_Data.ACCURACY + " integer default 0"};
 
     private UriMatcher sUriMatcher = null;
     private HashMap<String, String> accelDeviceMap = null;
@@ -132,8 +130,10 @@ public class Linear_Accelerometer_Provider extends ContentProvider {
     private static SQLiteDatabase database;
 
     private void initialiseDatabase() {
-        if (dbHelper == null)
+        if (dbHelper == null) {
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
+            dbHelper.setMetadataOnlyTrailingColumnDrops("label");
+        }
         if (database == null)
             database = dbHelper.getWritableDatabase();
     }
@@ -352,8 +352,6 @@ public class Linear_Accelerometer_Provider extends ContentProvider {
                 Linear_Accelerometer_Data.VALUES_2);
         accelDataMap.put(Linear_Accelerometer_Data.ACCURACY,
                 Linear_Accelerometer_Data.ACCURACY);
-        accelDataMap.put(Linear_Accelerometer_Data.LABEL,
-                Linear_Accelerometer_Data.LABEL);
 
         return true;
     }

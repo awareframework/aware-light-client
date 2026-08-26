@@ -28,7 +28,7 @@ import java.util.HashMap;
  */
 public class Proximity_Provider extends ContentProvider {
 
-    public static final int DATABASE_VERSION = 3;
+    public static final int DATABASE_VERSION = 4;
 
     /**
      * Authority of content provider
@@ -87,7 +87,6 @@ public class Proximity_Provider extends ContentProvider {
         public static final String DEVICE_ID = "device_id";
         public static final String PROXIMITY = "double_proximity";
         public static final String ACCURACY = "accuracy";
-        public static final String LABEL = "label";
     }
 
     public static String DATABASE_NAME = "proximity.db";
@@ -113,8 +112,7 @@ public class Proximity_Provider extends ContentProvider {
                     + Proximity_Data.TIMESTAMP + " real default 0,"
                     + Proximity_Data.DEVICE_ID + " text default '',"
                     + Proximity_Data.PROXIMITY + " real default 0,"
-                    + Proximity_Data.ACCURACY + " integer default 0,"
-                    + Proximity_Data.LABEL + " text default ''"};
+                    + Proximity_Data.ACCURACY + " integer default 0"};
 
     private UriMatcher sUriMatcher = null;
     private HashMap<String, String> sensorMap = null;
@@ -124,8 +122,10 @@ public class Proximity_Provider extends ContentProvider {
     private static SQLiteDatabase database;
 
     private void initialiseDatabase() {
-        if (dbHelper == null)
+        if (dbHelper == null) {
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
+            dbHelper.setMetadataOnlyTrailingColumnDrops("label");
+        }
         if (database == null)
             database = dbHelper.getWritableDatabase();
     }
@@ -327,7 +327,6 @@ public class Proximity_Provider extends ContentProvider {
         sensorDataMap.put(Proximity_Data.DEVICE_ID, Proximity_Data.DEVICE_ID);
         sensorDataMap.put(Proximity_Data.PROXIMITY, Proximity_Data.PROXIMITY);
         sensorDataMap.put(Proximity_Data.ACCURACY, Proximity_Data.ACCURACY);
-        sensorDataMap.put(Proximity_Data.LABEL, Proximity_Data.LABEL);
 
         return true;
     }

@@ -28,7 +28,7 @@ import java.util.HashMap;
  */
 public class Barometer_Provider extends ContentProvider {
 
-    public static final int DATABASE_VERSION = 2;
+    public static final int DATABASE_VERSION = 3;
 
     /**
      * Authority of content provider
@@ -87,7 +87,6 @@ public class Barometer_Provider extends ContentProvider {
         public static final String DEVICE_ID = "device_id";
         public static final String AMBIENT_PRESSURE = "double_values_0";
         public static final String ACCURACY = "accuracy";
-        public static final String LABEL = "label";
     }
 
     public static String DATABASE_NAME = "barometer.db";
@@ -112,8 +111,7 @@ public class Barometer_Provider extends ContentProvider {
                     + Barometer_Data.TIMESTAMP + " real default 0,"
                     + Barometer_Data.DEVICE_ID + " text default '',"
                     + Barometer_Data.AMBIENT_PRESSURE + " real default 0,"
-                    + Barometer_Data.ACCURACY + " integer default 0,"
-                    + Barometer_Data.LABEL + " text default ''"};
+                    + Barometer_Data.ACCURACY + " integer default 0"};
 
     private UriMatcher sUriMatcher = null;
     private HashMap<String, String> sensorMap = null;
@@ -123,8 +121,10 @@ public class Barometer_Provider extends ContentProvider {
     private static SQLiteDatabase database;
 
     private void initialiseDatabase() {
-        if (dbHelper == null)
+        if (dbHelper == null) {
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
+            dbHelper.setMetadataOnlyTrailingColumnDrops("label");
+        }
         if (database == null)
             database = dbHelper.getWritableDatabase();
     }
@@ -325,7 +325,6 @@ public class Barometer_Provider extends ContentProvider {
         sensorDataMap.put(Barometer_Data.AMBIENT_PRESSURE,
                 Barometer_Data.AMBIENT_PRESSURE);
         sensorDataMap.put(Barometer_Data.ACCURACY, Barometer_Data.ACCURACY);
-        sensorDataMap.put(Barometer_Data.LABEL, Barometer_Data.LABEL);
 
         return true;
     }

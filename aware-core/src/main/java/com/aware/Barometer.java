@@ -1,12 +1,10 @@
 
 package com.aware;
 
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.database.Cursor;
 import android.database.SQLException;
@@ -60,21 +58,8 @@ public class Barometer extends Aware_Sensor implements SensorEventListener {
     private static boolean ENFORCE_FREQUENCY = false;
 
     public static final String ACTION_AWARE_BAROMETER = "ACTION_AWARE_BAROMETER";
-    public static final String ACTION_AWARE_BAROMETER_LABEL = "ACTION_AWARE_BAROMETER_LABEL";
-    public static final String EXTRA_LABEL = "label";
 
     private List<ContentValues> data_values = new ArrayList<ContentValues>();
-    private static String LABEL = "";
-    private static DataLabel dataLabeler = new DataLabel();
-
-    public static class DataLabel extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_AWARE_BAROMETER_LABEL)) {
-                LABEL = intent.getStringExtra(EXTRA_LABEL);
-            }
-        }
-    }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -98,7 +83,6 @@ public class Barometer extends Aware_Sensor implements SensorEventListener {
         rowData.put(Barometer_Data.TIMESTAMP, TS);
         rowData.put(Barometer_Data.AMBIENT_PRESSURE, event.values[0]);
         rowData.put(Barometer_Data.ACCURACY, event.accuracy);
-        rowData.put(Barometer_Data.LABEL, LABEL);
 
         if (awareSensor != null) awareSensor.onBarometerChanged(rowData);
 
@@ -206,10 +190,6 @@ public class Barometer extends Aware_Sensor implements SensorEventListener {
 
         sensorHandler = new Handler(sensorThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_AWARE_BAROMETER_LABEL);
-        registerReceiver(dataLabeler, filter);
-
         if (Aware.DEBUG) Log.d(TAG, "Barometer service created!");
     }
 
@@ -222,8 +202,6 @@ public class Barometer extends Aware_Sensor implements SensorEventListener {
         sensorThread.quit();
 
         wakeLock.release();
-
-        unregisterReceiver(dataLabeler);
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Barometer_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(

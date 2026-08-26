@@ -29,7 +29,7 @@ import java.util.HashMap;
  */
 public class Accelerometer_Provider extends ContentProvider {
 
-    public static final int DATABASE_VERSION = 5;
+    public static final int DATABASE_VERSION = 6;
 
     /**
      * Authority of content provider
@@ -93,7 +93,6 @@ public class Accelerometer_Provider extends ContentProvider {
         public static final String VALUES_1 = "double_values_1";
         public static final String VALUES_2 = "double_values_2";
         public static final String ACCURACY = "accuracy";
-        public static final String LABEL = "label";
     }
 
     public static String DATABASE_NAME = "accelerometer.db";
@@ -120,15 +119,16 @@ public class Accelerometer_Provider extends ContentProvider {
                     + Accelerometer_Data.VALUES_0 + " real default 0,"
                     + Accelerometer_Data.VALUES_1 + " real default 0,"
                     + Accelerometer_Data.VALUES_2 + " real default 0,"
-                    + Accelerometer_Data.ACCURACY + " integer default 0,"
-                    + Accelerometer_Data.LABEL + " text default ''"};
+                    + Accelerometer_Data.ACCURACY + " integer default 0"};
 
     private DatabaseHelper dbHelper;
     private static SQLiteDatabase database;
 
     private void initialiseDatabase() {
-        if (dbHelper == null)
+        if (dbHelper == null) {
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
+            dbHelper.setMetadataOnlyTrailingColumnDrops("label");
+        }
         if (database == null)
             database = dbHelper.getWritableDatabase();
     }
@@ -320,7 +320,6 @@ public class Accelerometer_Provider extends ContentProvider {
         accelDataMap.put(Accelerometer_Data.VALUES_1, Accelerometer_Data.VALUES_1);
         accelDataMap.put(Accelerometer_Data.VALUES_2, Accelerometer_Data.VALUES_2);
         accelDataMap.put(Accelerometer_Data.ACCURACY, Accelerometer_Data.ACCURACY);
-        accelDataMap.put(Accelerometer_Data.LABEL, Accelerometer_Data.LABEL);
 
         return true;
     }

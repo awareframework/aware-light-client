@@ -8,6 +8,7 @@ import com.aware.providers.Aware_Provider;
 
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -64,6 +65,26 @@ public class DatabaseHelperColumnsTest {
         assertEquals(3, carried.size());
         assertTrue(carried.contains("model"));
         assertFalse("a dropped column must not reach the carry-over", carried.contains("brand"));
+    }
+
+    @Test
+    public void configuredTrailingColumnCanBeDroppedWithoutCopyingRows() {
+        assertTrue(DatabaseHelper.isConfiguredTrailingColumnDrop(
+                Arrays.asList("_id", "timestamp", "device_id", "value", "label"),
+                Arrays.asList("_id", "timestamp", "device_id", "value"),
+                Arrays.asList("label")));
+    }
+
+    @Test
+    public void metadataOnlyDropRejectsMiddleOrUnexpectedColumns() {
+        assertFalse(DatabaseHelper.isConfiguredTrailingColumnDrop(
+                Arrays.asList("_id", "label", "value"),
+                Arrays.asList("_id", "value"),
+                Arrays.asList("label")));
+        assertFalse(DatabaseHelper.isConfiguredTrailingColumnDrop(
+                Arrays.asList("_id", "value", "accuracy"),
+                Arrays.asList("_id", "value"),
+                Arrays.asList("label")));
     }
 
     @Test

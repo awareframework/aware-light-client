@@ -28,7 +28,7 @@ import java.util.HashMap;
  */
 public class Temperature_Provider extends ContentProvider {
 
-    public static final int DATABASE_VERSION = 3;
+    public static final int DATABASE_VERSION = 4;
 
     /**
      * Authority of content provider
@@ -87,7 +87,6 @@ public class Temperature_Provider extends ContentProvider {
         public static final String DEVICE_ID = "device_id";
         public static final String TEMPERATURE_CELSIUS = "temperature_celsius";
         public static final String ACCURACY = "accuracy";
-        public static final String LABEL = "label";
     }
 
     public static String DATABASE_NAME = "temperature.db";
@@ -114,8 +113,7 @@ public class Temperature_Provider extends ContentProvider {
                     + Temperature_Data.TIMESTAMP + " real default 0,"
                     + Temperature_Data.DEVICE_ID + " text default '',"
                     + Temperature_Data.TEMPERATURE_CELSIUS + " real default 0,"
-                    + Temperature_Data.ACCURACY + " integer default 0,"
-                    + Temperature_Data.LABEL + " text default ''"};
+                    + Temperature_Data.ACCURACY + " integer default 0"};
 
     private UriMatcher sUriMatcher = null;
     private HashMap<String, String> sensorMap = null;
@@ -124,8 +122,10 @@ public class Temperature_Provider extends ContentProvider {
     private static SQLiteDatabase database;
 
     private void initialiseDatabase() {
-        if (dbHelper == null)
+        if (dbHelper == null) {
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
+            dbHelper.setMetadataOnlyTrailingColumnDrops("label");
+        }
         if (database == null)
             database = dbHelper.getWritableDatabase();
     }
@@ -329,7 +329,6 @@ public class Temperature_Provider extends ContentProvider {
         sensorDataMap.put(Temperature_Data.TEMPERATURE_CELSIUS,
                 Temperature_Data.TEMPERATURE_CELSIUS);
         sensorDataMap.put(Temperature_Data.ACCURACY, Temperature_Data.ACCURACY);
-        sensorDataMap.put(Temperature_Data.LABEL, Temperature_Data.LABEL);
 
         return true;
     }

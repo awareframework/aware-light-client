@@ -1,12 +1,10 @@
 
 package com.aware;
 
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.database.Cursor;
 import android.database.SQLException;
@@ -66,27 +64,12 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
      * ContentProvider: Temperature_Provider
      */
     public static final String ACTION_AWARE_TEMPERATURE = "ACTION_AWARE_TEMPERATURE";
-    public static final String ACTION_AWARE_TEMPERATURE_LABEL = "ACTION_AWARE_TEMPERATURE_LABEL";
-    public static final String EXTRA_LABEL = "label";
 
     /**
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
     private List<ContentValues> data_values = new ArrayList<ContentValues>();
-
-    private static String LABEL = "";
-
-    private static DataLabel dataLabeler = new DataLabel();
-
-    public static class DataLabel extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_AWARE_TEMPERATURE_LABEL)) {
-                LABEL = intent.getStringExtra(EXTRA_LABEL);
-            }
-        }
-    }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -109,7 +92,6 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
         rowData.put(Temperature_Data.TIMESTAMP, TS);
         rowData.put(Temperature_Data.TEMPERATURE_CELSIUS, event.values[0]);
         rowData.put(Temperature_Data.ACCURACY, event.accuracy);
-        rowData.put(Temperature_Data.LABEL, LABEL);
 
         if (awareSensor != null) awareSensor.onTemperatureChanged(rowData);
 
@@ -214,10 +196,6 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
 
         sensorHandler = new Handler(sensorThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_AWARE_TEMPERATURE_LABEL);
-        registerReceiver(dataLabeler, filter);
-
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.HONEYCOMB) {
             mTemperature = mSensorManager.getDefaultSensor(Sensor.TYPE_TEMPERATURE);
         } else {
@@ -236,8 +214,6 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
         sensorThread.quit();
 
         wakeLock.release();
-
-        unregisterReceiver(dataLabeler);
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Temperature_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(

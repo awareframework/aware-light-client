@@ -29,7 +29,7 @@ import java.util.HashMap;
  */
 public class Gyroscope_Provider extends ContentProvider {
 
-    public static final int DATABASE_VERSION = 4;
+    public static final int DATABASE_VERSION = 5;
 
     /**
      * Authority of Gyroscope content provider
@@ -85,7 +85,6 @@ public class Gyroscope_Provider extends ContentProvider {
         public static final String VALUES_1 = "double_values_1";
         public static final String VALUES_2 = "double_values_2";
         public static final String ACCURACY = "accuracy";
-        public static final String LABEL = "label";
     }
 
     public static String DATABASE_NAME = "gyroscope.db";
@@ -113,8 +112,7 @@ public class Gyroscope_Provider extends ContentProvider {
                     + Gyroscope_Data.VALUES_0 + " real default 0,"
                     + Gyroscope_Data.VALUES_1 + " real default 0,"
                     + Gyroscope_Data.VALUES_2 + " real default 0,"
-                    + Gyroscope_Data.ACCURACY + " integer default 0,"
-                    + Gyroscope_Data.LABEL + " text default ''"};
+                    + Gyroscope_Data.ACCURACY + " integer default 0"};
 
     private static UriMatcher sUriMatcher = null;
     private static HashMap<String, String> gyroDeviceMap = null;
@@ -124,8 +122,10 @@ public class Gyroscope_Provider extends ContentProvider {
     private static SQLiteDatabase database;
 
     private void initialiseDatabase() {
-        if (dbHelper == null)
+        if (dbHelper == null) {
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
+            dbHelper.setMetadataOnlyTrailingColumnDrops("label");
+        }
         if (database == null)
             database = dbHelper.getWritableDatabase();
     }
@@ -333,7 +333,6 @@ public class Gyroscope_Provider extends ContentProvider {
         gyroDataMap.put(Gyroscope_Data.VALUES_1, Gyroscope_Data.VALUES_1);
         gyroDataMap.put(Gyroscope_Data.VALUES_2, Gyroscope_Data.VALUES_2);
         gyroDataMap.put(Gyroscope_Data.ACCURACY, Gyroscope_Data.ACCURACY);
-        gyroDataMap.put(Gyroscope_Data.LABEL, Gyroscope_Data.LABEL);
 
         return true;
     }

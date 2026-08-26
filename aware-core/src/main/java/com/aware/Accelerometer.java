@@ -1,12 +1,10 @@
 
 package com.aware;
 
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.database.Cursor;
 import android.database.SQLException;
@@ -48,7 +46,6 @@ public class Accelerometer extends Aware_Sensor implements SensorEventListener {
     private static HandlerThread sensorThread = null;
     private static Handler sensorHandler = null;
     private static PowerManager.WakeLock wakeLock = null;
-    private static String LABEL = "";
 
     private static Float[] LAST_VALUES = null;
     private static long LAST_TS = 0;
@@ -59,21 +56,8 @@ public class Accelerometer extends Aware_Sensor implements SensorEventListener {
     private static boolean ENFORCE_FREQUENCY = false;
 
     public static final String ACTION_AWARE_ACCELEROMETER = "ACTION_AWARE_ACCELEROMETER";
-    public static final String ACTION_AWARE_ACCELEROMETER_LABEL = "ACTION_AWARE_ACCELEROMETER_LABEL";
-    public static final String EXTRA_LABEL = "label";
 
     private List<ContentValues> data_values = new ArrayList<>();
-
-    private static DataLabel dataLabeler = new DataLabel();
-
-    public static class DataLabel extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_AWARE_ACCELEROMETER_LABEL)) {
-                LABEL = intent.getStringExtra(EXTRA_LABEL);
-            }
-        }
-    }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -126,7 +110,6 @@ public class Accelerometer extends Aware_Sensor implements SensorEventListener {
         rowData.put(Accelerometer_Data.VALUES_1, event.values[1]);
         rowData.put(Accelerometer_Data.VALUES_2, event.values[2]);
         rowData.put(Accelerometer_Data.ACCURACY, event.accuracy);
-        rowData.put(Accelerometer_Data.LABEL, LABEL);
 
         if (awareSensor != null) awareSensor.onAccelerometerChanged(rowData);
 
@@ -231,10 +214,6 @@ public class Accelerometer extends Aware_Sensor implements SensorEventListener {
 
         sensorHandler = new Handler(sensorThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_AWARE_ACCELEROMETER_LABEL);
-        registerReceiver(dataLabeler, filter);
-
         if (Aware.DEBUG) Log.d(TAG, "Accelerometer service created!");
     }
 
@@ -246,8 +225,6 @@ public class Accelerometer extends Aware_Sensor implements SensorEventListener {
         mSensorManager.unregisterListener(this, mAccelerometer);
         sensorThread.quit();
         wakeLock.release();
-
-        unregisterReceiver(dataLabeler);
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Accelerometer_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(

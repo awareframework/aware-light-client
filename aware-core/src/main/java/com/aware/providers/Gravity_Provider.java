@@ -28,7 +28,7 @@ import java.util.HashMap;
  */
 public class Gravity_Provider extends ContentProvider {
 
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 4;
 
     /**
      * Authority of content provider
@@ -89,7 +89,6 @@ public class Gravity_Provider extends ContentProvider {
         public static final String VALUES_1 = "double_values_1";
         public static final String VALUES_2 = "double_values_2";
         public static final String ACCURACY = "accuracy";
-        public static final String LABEL = "label";
     }
 
     public static String DATABASE_NAME = "gravity.db";
@@ -117,8 +116,7 @@ public class Gravity_Provider extends ContentProvider {
                     + Gravity_Data.VALUES_0 + " real default 0,"
                     + Gravity_Data.VALUES_1 + " real default 0,"
                     + Gravity_Data.VALUES_2 + " real default 0,"
-                    + Gravity_Data.ACCURACY + " integer default 0,"
-                    + Gravity_Data.LABEL + " text default ''"};
+                    + Gravity_Data.ACCURACY + " integer default 0"};
 
     private UriMatcher sUriMatcher = null;
     private HashMap<String, String> sensorDeviceMap = null;
@@ -128,8 +126,10 @@ public class Gravity_Provider extends ContentProvider {
     private static SQLiteDatabase database;
 
     private void initialiseDatabase() {
-        if (dbHelper == null)
+        if (dbHelper == null) {
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
+            dbHelper.setMetadataOnlyTrailingColumnDrops("label");
+        }
         if (database == null)
             database = dbHelper.getWritableDatabase();
     }
@@ -331,7 +331,6 @@ public class Gravity_Provider extends ContentProvider {
         sensorDataMap.put(Gravity_Data.VALUES_1, Gravity_Data.VALUES_1);
         sensorDataMap.put(Gravity_Data.VALUES_2, Gravity_Data.VALUES_2);
         sensorDataMap.put(Gravity_Data.ACCURACY, Gravity_Data.ACCURACY);
-        sensorDataMap.put(Gravity_Data.LABEL, Gravity_Data.LABEL);
 
         return true;
     }

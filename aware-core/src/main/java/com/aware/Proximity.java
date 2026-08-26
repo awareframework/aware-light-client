@@ -1,12 +1,10 @@
 
 package com.aware;
 
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.database.Cursor;
 import android.database.SQLException;
@@ -61,27 +59,12 @@ public class Proximity extends Aware_Sensor implements SensorEventListener {
      * ContentProvider: ProximityProvider
      */
     public static final String ACTION_AWARE_PROXIMITY = "ACTION_AWARE_PROXIMITY";
-    public static final String ACTION_AWARE_PROXIMITY_LABEL = "ACTION_AWARE_PROXIMITY_LABEL";
-    public static final String EXTRA_LABEL = "label";
 
     /**
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
     private List<ContentValues> data_values = new ArrayList<ContentValues>();
-
-    private static String LABEL = "";
-
-    private static DataLabel dataLabeler = new DataLabel();
-
-    public static class DataLabel extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_AWARE_PROXIMITY_LABEL)) {
-                LABEL = intent.getStringExtra(EXTRA_LABEL);
-            }
-        }
-    }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -104,7 +87,6 @@ public class Proximity extends Aware_Sensor implements SensorEventListener {
         rowData.put(Proximity_Data.TIMESTAMP, TS);
         rowData.put(Proximity_Data.PROXIMITY, event.values[0]);
         rowData.put(Proximity_Data.ACCURACY, event.accuracy);
-        rowData.put(Proximity_Data.LABEL, LABEL);
 
         if (awareSensor != null) awareSensor.onProximityChanged(rowData);
 
@@ -211,10 +193,6 @@ public class Proximity extends Aware_Sensor implements SensorEventListener {
 
         sensorHandler = new Handler(sensorThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_AWARE_PROXIMITY_LABEL);
-        registerReceiver(dataLabeler, filter);
-
         if (Aware.DEBUG) Log.d(TAG, "Proximity service created!");
     }
 
@@ -227,8 +205,6 @@ public class Proximity extends Aware_Sensor implements SensorEventListener {
         sensorThread.quit();
 
         wakeLock.release();
-
-        unregisterReceiver(dataLabeler);
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Proximity_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(

@@ -28,7 +28,7 @@ import java.util.HashMap;
  */
 public class Light_Provider extends ContentProvider {
 
-    public static final int DATABASE_VERSION = 3;
+    public static final int DATABASE_VERSION = 4;
 
     /**
      * Authority of content provider
@@ -87,7 +87,6 @@ public class Light_Provider extends ContentProvider {
         public static final String DEVICE_ID = "device_id";
         public static final String LIGHT_LUX = "double_light_lux";
         public static final String ACCURACY = "accuracy";
-        public static final String LABEL = "label";
     }
 
     public static String DATABASE_NAME = "light.db";
@@ -111,8 +110,7 @@ public class Light_Provider extends ContentProvider {
                     + Light_Data.TIMESTAMP + " real default 0,"
                     + Light_Data.DEVICE_ID + " text default '',"
                     + Light_Data.LIGHT_LUX + " real default 0,"
-                    + Light_Data.ACCURACY + " integer default 0,"
-                    + Light_Data.LABEL + " text default ''"};
+                    + Light_Data.ACCURACY + " integer default 0"};
 
     private UriMatcher sUriMatcher = null;
     private HashMap<String, String> sensorMap = null;
@@ -122,8 +120,10 @@ public class Light_Provider extends ContentProvider {
     private static SQLiteDatabase database;
 
     private void initialiseDatabase() {
-        if (dbHelper == null)
+        if (dbHelper == null) {
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
+            dbHelper.setMetadataOnlyTrailingColumnDrops("label");
+        }
         if (database == null)
             database = dbHelper.getWritableDatabase();
     }
@@ -323,7 +323,6 @@ public class Light_Provider extends ContentProvider {
         sensorDataMap.put(Light_Data.DEVICE_ID, Light_Data.DEVICE_ID);
         sensorDataMap.put(Light_Data.LIGHT_LUX, Light_Data.LIGHT_LUX);
         sensorDataMap.put(Light_Data.ACCURACY, Light_Data.ACCURACY);
-        sensorDataMap.put(Light_Data.LABEL, Light_Data.LABEL);
 
         return true;
     }

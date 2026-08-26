@@ -1,12 +1,10 @@
 
 package com.aware;
 
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.database.Cursor;
 import android.database.SQLException;
@@ -67,27 +65,11 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
     public static final String EXTRA_SENSOR = "sensor";
     public static final String EXTRA_DATA = "data";
 
-    public static final String ACTION_AWARE_GYROSCOPE_LABEL = "ACTION_AWARE_GYROSCOPE_LABEL";
-    public static final String EXTRA_LABEL = "label";
-
     /**
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
     private List<ContentValues> data_values = new ArrayList<>();
-
-    private static String LABEL = "";
-
-    private static DataLabel dataLabeler = new DataLabel();
-
-    public static class DataLabel extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_AWARE_GYROSCOPE_LABEL)) {
-                LABEL = intent.getStringExtra(EXTRA_LABEL);
-            }
-        }
-    }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -142,7 +124,6 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
         rowData.put(Gyroscope_Data.VALUES_1, event.values[1]);
         rowData.put(Gyroscope_Data.VALUES_2, event.values[2]);
         rowData.put(Gyroscope_Data.ACCURACY, event.accuracy);
-        rowData.put(Gyroscope_Data.LABEL, LABEL);
 
         if (awareSensor != null) awareSensor.onGyroscopeChanged(rowData);
 
@@ -253,10 +234,6 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
 
         sensorHandler = new Handler(sensorThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_AWARE_GYROSCOPE_LABEL);
-        registerReceiver(dataLabeler, filter);
-
         if (Aware.DEBUG) Log.d(TAG, "Gyroscope service created!");
     }
 
@@ -269,8 +246,6 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
         sensorThread.quit();
 
         wakeLock.release();
-
-        unregisterReceiver(dataLabeler);
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Gyroscope_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(

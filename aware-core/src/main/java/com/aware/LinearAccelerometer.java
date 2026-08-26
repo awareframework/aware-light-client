@@ -1,12 +1,10 @@
 
 package com.aware;
 
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.database.Cursor;
 import android.database.SQLException;
@@ -62,27 +60,12 @@ public class LinearAccelerometer extends Aware_Sensor implements SensorEventList
      * ContentProvider: LinearAccelerationProvider
      */
     public static final String ACTION_AWARE_LINEAR_ACCELEROMETER = "ACTION_AWARE_LINEAR_ACCELEROMETER";
-    public static final String ACTION_AWARE_LINEAR_LABEL = "ACTION_AWARE_LINEAR_LABEL";
-    public static final String EXTRA_LABEL = "label";
 
     /**
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
     private List<ContentValues> data_values = new ArrayList<ContentValues>();
-
-    private static String LABEL = "";
-
-    private static DataLabel dataLabeler = new DataLabel();
-
-    public static class DataLabel extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_AWARE_LINEAR_LABEL)) {
-                LABEL = intent.getStringExtra(EXTRA_LABEL);
-            }
-        }
-    }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -136,7 +119,6 @@ public class LinearAccelerometer extends Aware_Sensor implements SensorEventList
         rowData.put(Linear_Accelerometer_Data.VALUES_1, event.values[1]);
         rowData.put(Linear_Accelerometer_Data.VALUES_2, event.values[2]);
         rowData.put(Linear_Accelerometer_Data.ACCURACY, event.accuracy);
-        rowData.put(Linear_Accelerometer_Data.LABEL, LABEL);
 
         data_values.add(rowData);
         LAST_TS = TS;
@@ -242,10 +224,6 @@ public class LinearAccelerometer extends Aware_Sensor implements SensorEventList
 
         sensorHandler = new Handler(sensorThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_AWARE_LINEAR_LABEL);
-        registerReceiver(dataLabeler, filter);
-
         if (Aware.DEBUG) Log.d(TAG, "Linear-accelerometer service created!");
     }
 
@@ -258,8 +236,6 @@ public class LinearAccelerometer extends Aware_Sensor implements SensorEventList
         sensorThread.quit();
 
         wakeLock.release();
-
-        unregisterReceiver(dataLabeler);
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Linear_Accelerometer_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(
