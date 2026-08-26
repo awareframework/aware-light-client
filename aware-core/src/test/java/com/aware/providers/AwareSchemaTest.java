@@ -83,6 +83,14 @@ public class AwareSchemaTest {
     }
 
     @Test
+    public void aSyncMarkerCarriesTheRowItStoppedAt() {
+        // The cursor an upload resumes from is a row id: it is distinct per row and assigned in
+        // insertion order, so a batch resumes on the row after the last one the server took.
+        assertTrue(schemaOf("aware_sync_markers")
+                .contains(Aware_Sync_Markers.MARKER_LAST_ID + " integer"));
+    }
+
+    @Test
     public void everyDeclaredTableHasASchema() {
         assertTrue(Aware_Provider.DATABASE_TABLES.length == Aware_Provider.TABLES_FIELDS.length);
     }

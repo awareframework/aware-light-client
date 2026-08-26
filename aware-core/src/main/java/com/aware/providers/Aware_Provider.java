@@ -28,7 +28,7 @@ import java.util.HashMap;
  */
 public class Aware_Provider extends ContentProvider {
 
-    public static final int DATABASE_VERSION = 20;
+    public static final int DATABASE_VERSION = 21;
 
     /**
      * AWARE framework content authority
@@ -188,6 +188,8 @@ public class Aware_Provider extends ContentProvider {
         public static final String MARKER_TABLE = "table_name";
         /** Timestamp of the last row the server acknowledged for that table. */
         public static final String MARKER_LAST_SYNCED = "last_sync_timestamp";
+        /** Row id of the last row the server acknowledged for that table. */
+        public static final String MARKER_LAST_ID = "last_sync_id";
     }
 
     public static String DATABASE_NAME = "aware.db";
@@ -251,6 +253,7 @@ public class Aware_Provider extends ContentProvider {
             Aware_Sync_Markers.MARKER_ID + " integer primary key autoincrement," +
                     Aware_Sync_Markers.MARKER_TABLE + " text default ''," +
                     Aware_Sync_Markers.MARKER_LAST_SYNCED + " real default 0," +
+                    Aware_Sync_Markers.MARKER_LAST_ID + " integer default 0," +
                     "UNIQUE(" + Aware_Sync_Markers.MARKER_TABLE + ")"
     };
 
@@ -523,6 +526,7 @@ public class Aware_Provider extends ContentProvider {
         syncMarkersMap.put(Aware_Sync_Markers.MARKER_ID, Aware_Sync_Markers.MARKER_ID);
         syncMarkersMap.put(Aware_Sync_Markers.MARKER_TABLE, Aware_Sync_Markers.MARKER_TABLE);
         syncMarkersMap.put(Aware_Sync_Markers.MARKER_LAST_SYNCED, Aware_Sync_Markers.MARKER_LAST_SYNCED);
+        syncMarkersMap.put(Aware_Sync_Markers.MARKER_LAST_ID, Aware_Sync_Markers.MARKER_LAST_ID);
 
         return true;
     }

@@ -27,6 +27,7 @@ import com.aware.utils.Https;
 import com.aware.utils.Jdbc;
 import com.aware.utils.SSLManager;
 import com.aware.utils.SyncBatchBudget;
+import com.aware.utils.SyncCursor;
 import com.aware.utils.Webservice;
 import com.aware.utils.UploadHealth;
 import org.json.JSONArray;
@@ -53,7 +54,6 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
     private NotificationManager notManager;
 
     private final ArrayList<String> highFrequencySensors = new ArrayList<>();
-    private final ArrayList<String> dontClearSensors = new ArrayList<>();
 
     private int notificationID = 99990;
 
@@ -79,8 +79,6 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
         highFrequencySensors.add("screentext");
         highFrequencySensors.add("screenshot");
         highFrequencySensors.add("plugin_ambient_noise");
-
-        dontClearSensors.add("aware_studies");
     }
 
     /**
@@ -186,68 +184,67 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
         try {
             String[] columnsStr = getTableColumnsNames(CONTENT_URI, context);
 
-            /**
-             * The last-synced marker is read from the local aware_sync_markers table. The server is
-             * never queried for it: one round trip per table per sync event does not scale.
-             */
-            String latest = getLatestRecordSynched(database_table, columnsStr);
-
             String study_condition = getStudySyncCondition(context, database_table);
-            int total_records = getNumberOfRecordsToSync(CONTENT_URI, columnsStr, latest, study_condition, context);
-            boolean allow_table_maintenance = isTableAllowedForMaintenance(database_table);
 
-            // Nothing further is computable without a marker. Checked outside the DEBUG block so a
-            // build with debugging off takes the same path as one with it on.
-            if (latest == null) return;
+            /**
+             * The cursor is read from the local aware_sync_markers table. The server is never
+             * queried for it: one round trip per table per sync event does not scale.
+             */
+            long cursorId = getSyncCursor(database_table, CONTENT_URI, study_condition);
+
+            int total_records = getNumberOfRecordsToSync(CONTENT_URI, columnsStr, cursorId, study_condition, context);
+            boolean allow_table_maintenance = isTableAllowedForMaintenance(database_table);
 
             if (Aware.DEBUG) {
                 Log.d(Aware.TAG, "Syncing table: " + database_table);
-                Log.d(Aware.TAG, "Local last-synced marker for this table: " + latest);
+                Log.d(Aware.TAG, "Upload resumes after row id: " + cursorId);
                 Log.d(Aware.TAG, "Joined study since: " + study_condition);
                 Log.d(Aware.TAG, "Rows remaining to sync: " + total_records);
             }
 
             // If we have records to sync
             if (total_records > 0) {
-                JSONArray remoteLatestData = new JSONArray(latest);
                 long start = System.currentTimeMillis();
                 int uploaded_records = 0;
                 int batches = (int) Math.ceil(total_records / (double) MAX_POST_SIZE);
 
-                long removeFrom = 0;
-                long removeFromId = 0;
+                long acknowledgedId = 0;
+                long acknowledgedTimestamp = 0;
                 long[] batchMaxId = new long[]{0};
                 int[] batchRowCount = new int[]{0};
-                Long lastSynced;
+                long[] batchLastTimestamp = new long[]{0};
 
                 do {
                     if (!Aware.getSetting(context, Aware_Preferences.WEBSERVICE_SILENT).equals("true"))
                         notifyUser(context, "Table: " + database_table + " syncing batch " + (uploaded_records + MAX_POST_SIZE) / MAX_POST_SIZE + " of " + batches, false, true, notificationID);
 
                     batchRowCount[0] = 0;
-                    Cursor sync_data = getSyncData(remoteLatestData, CONTENT_URI, study_condition, columnsStr, uploaded_records, context, MAX_POST_SIZE);
-                    lastSynced = syncBatch(sync_data, database_table, device_id, context, DEBUG, batchMaxId, batchRowCount);
-                    if (lastSynced == null) {
-                        removeFrom = 0;
-                        removeFromId = 0;
+                    batchMaxId[0] = 0;
+                    Cursor sync_data = getSyncData(CONTENT_URI, study_condition, columnsStr, cursorId, context, MAX_POST_SIZE);
+                    if (!syncBatch(sync_data, database_table, device_id, context, DEBUG, batchMaxId, batchRowCount, batchLastTimestamp)) {
                         Log.d(Aware.TAG, "Batch for " + database_table + " was not acknowledged by the database. Will try again later.");
                         break;
-                    } else {
-                        removeFrom = lastSynced;
-                        removeFromId = batchMaxId[0];
                     }
-                    // Advance by the rows the batch actually carried, which is fewer than the
-                    // row-count cap whenever the payload budget closed the batch early. Advancing by
-                    // the cap instead would step the offset past rows that were never uploaded. The
-                    // floor of 1 is a guard against an unproductive batch looping forever; a batch
-                    // that took no rows reports lastSynced 0 and the condition below ends the loop.
-                    uploaded_records += Math.max(batchRowCount[0], 1);
+
+                    // A batch that read no rows has drained the table: the cursor already stands at
+                    // the last row, so there is nothing to advance it past.
+                    if (batchRowCount[0] == 0) break;
+
+                    // The cursor moves to the rows the server took, and is stored before the next
+                    // batch is read. An interrupted run therefore resumes from the last acknowledged
+                    // row rather than from where this run began.
+                    cursorId = SyncCursor.advance(cursorId, batchMaxId[0]);
+                    acknowledgedId = cursorId;
+                    acknowledgedTimestamp = batchLastTimestamp[0];
+                    setSyncCursor(database_table, acknowledgedId, acknowledgedTimestamp);
+
+                    uploaded_records += batchRowCount[0];
                 }
-                while (uploaded_records < total_records && lastSynced > 0 && isWifiNeededAndConnected());
+                while (uploaded_records < total_records && isWifiNeededAndConnected());
 
                 //Are we performing database space maintenance?
-                if (removeFrom > 0 && allow_table_maintenance)
-                    performDatabaseSpaceMaintenance(CONTENT_URI, removeFrom, removeFromId, columnsStr, web_service_remove_data, context, database_table, DEBUG);
+                if (acknowledgedId > 0 && allow_table_maintenance)
+                    performDatabaseSpaceMaintenance(CONTENT_URI, acknowledgedTimestamp, acknowledgedId, columnsStr, web_service_remove_data, context, database_table, DEBUG);
 
                 if (DEBUG)
                     Log.d(Aware.TAG, database_table + " sync time: " + DateUtils.formatElapsedTime((System.currentTimeMillis() - start) / 1000));
@@ -384,46 +381,55 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
     }
 
     /**
-     * How far {@code database_table} has been uploaded, shaped as the single-element JSON array the
-     * sync loop consumes, or an empty array when the table has never been uploaded.
+     * The row id {@code database_table} resumes its upload from, and 0 for a table whose rows have
+     * never been offered.
      *
      * The marker is keyed by table name in its own table, so finding it is an equality match on one
      * row rather than a pattern match over log text.
      *
-     * The key the timestamp is returned under has to match the column the table is paged by:
-     * session-based tables advance on their end timestamp, ESM answers on the answer timestamp, and
-     * everything else on {@code timestamp}.
+     * A marker holding a timestamp alone names a position on the table rather than a row, so it is
+     * translated once into the id of the newest row at or before it. Everything at that instant is
+     * treated as delivered, which is the reading that offers no row twice.
      */
-    private String getLatestRecordSynched(String database_table, String[] columnsStr) {
-
-        JSONObject latest = new JSONObject();
+    private long getSyncCursor(String database_table, Uri CONTENT_URI, String study_condition) {
+        long cursorId = 0;
+        long markerTimestamp = 0;
 
         Cursor marker = mContext.getContentResolver().query(
                 Aware_Provider.Aware_Sync_Markers.CONTENT_URI, null,
                 Aware_Provider.Aware_Sync_Markers.MARKER_TABLE + "=?",
                 new String[]{database_table}, null);
 
-        boolean found = marker != null && marker.moveToFirst();
-        if (found) {
-            long last_sync_timestamp = marker.getLong(
+        if (marker != null && marker.moveToFirst()) {
+            int idIndex = marker.getColumnIndex(Aware_Provider.Aware_Sync_Markers.MARKER_LAST_ID);
+            if (idIndex >= 0) cursorId = marker.getLong(idIndex);
+            markerTimestamp = marker.getLong(
                     marker.getColumnIndex(Aware_Provider.Aware_Sync_Markers.MARKER_LAST_SYNCED));
-            try {
-                if (exists(columnsStr, "double_end_timestamp")) {
-                    latest = new JSONObject().put("double_end_timestamp", last_sync_timestamp);
-                } else if (exists(columnsStr, "double_esm_user_answer_timestamp")) {
-                    latest = new JSONObject().put("double_esm_user_answer_timestamp", last_sync_timestamp);
-                } else {
-                    latest = new JSONObject().put("timestamp", last_sync_timestamp);
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
         }
         if (marker != null && !marker.isClosed()) marker.close();
 
-        if (!found) return new JSONArray().toString();
+        if (SyncCursor.needsSeeding(cursorId, markerTimestamp)) {
+            cursorId = highestRowIdUpTo(CONTENT_URI, markerTimestamp, study_condition);
+            setSyncCursor(database_table, cursorId, markerTimestamp);
+            if (Aware.DEBUG)
+                Log.d(Aware.TAG, database_table + ": upload resumes from row id " + cursorId);
+        }
 
-        return new JSONArray().put(latest).toString();
+        return cursorId;
+    }
+
+    /** The newest row captured at or before {@code timestamp}, as its row id. */
+    private long highestRowIdUpTo(Uri CONTENT_URI, long timestamp, String study_condition) {
+        long rowId = 0;
+        Cursor newest = mContext.getContentResolver().query(CONTENT_URI,
+                new String[]{SyncCursor.ROW_ID},
+                "timestamp <= " + timestamp + (study_condition == null ? "" : study_condition),
+                null, SyncCursor.ROW_ID + " DESC LIMIT 1");
+        if (newest != null && newest.moveToFirst()) {
+            rowId = newest.getLong(newest.getColumnIndex(SyncCursor.ROW_ID));
+        }
+        if (newest != null && !newest.isClosed()) newest.close();
+        return rowId;
     }
 
     /**
@@ -431,12 +437,14 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
      *
      * Written after the server acknowledges a batch, and read by the next sync of that table to pick
      * up where this one stopped. The provider replaces the table's previous marker, so this holds one
-     * row per synced table.
+     * row per synced table. The timestamp travels beside the cursor as the human-readable account of
+     * how current a table is.
      */
-    private void setLatestRecordSynched(String database_table, long lastSynced) {
+    private void setSyncCursor(String database_table, long lastSyncedId, long lastSyncedTimestamp) {
         ContentValues marker = new ContentValues();
         marker.put(Aware_Provider.Aware_Sync_Markers.MARKER_TABLE, database_table);
-        marker.put(Aware_Provider.Aware_Sync_Markers.MARKER_LAST_SYNCED, lastSynced);
+        marker.put(Aware_Provider.Aware_Sync_Markers.MARKER_LAST_ID, lastSyncedId);
+        marker.put(Aware_Provider.Aware_Sync_Markers.MARKER_LAST_SYNCED, lastSyncedTimestamp);
         mContext.getContentResolver().insert(Aware_Provider.Aware_Sync_Markers.CONTENT_URI, marker);
     }
 
@@ -459,113 +467,47 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
         return study_condition;
     }
 
-    private int getNumberOfRecordsToSync(Uri CONTENT_URI, String[] columnsStr, String latest, String study_condition, Context mContext) throws JSONException {
-        if (latest == null) return 0;
-
-        JSONArray remoteData = new JSONArray(latest);
-        Log.d(Aware.TAG, "Remote Data: " + remoteData.toString());
-
-        int TOTAL_RECORDS = 0;
-        if (remoteData.length() == 0) {
-            if (exists(columnsStr, "double_end_timestamp")) {
-                Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "double_end_timestamp != 0" + study_condition, null, "_id ASC");
-                Log.d(Aware.TAG, "Query: double_end_timestamp != 0" + study_condition);
-                if (counter != null && counter.moveToFirst()) {
-                    TOTAL_RECORDS = counter.getCount();
-                    counter.close();
-                }
-                if (counter != null && !counter.isClosed()) counter.close();
-            } else if (exists(columnsStr, "double_esm_user_answer_timestamp")) {
-                Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "double_esm_user_answer_timestamp != 0" + study_condition, null, "_id ASC");
-                Log.d(Aware.TAG, "Query: double_esm_user_answer_timestamp != 0" + study_condition);
-                if (counter != null && counter.moveToFirst()) {
-                    TOTAL_RECORDS = counter.getCount();
-                    counter.close();
-                }
-                if (counter != null && !counter.isClosed()) counter.close();
-            } else {
-                Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "1" + study_condition, null, "_id ASC");
-                Log.d(Aware.TAG, "Query: 1" + study_condition);
-                if (counter != null && counter.moveToFirst()) {
-                    TOTAL_RECORDS = counter.getCount();
-                    counter.close();
-                }
-                if (counter != null && !counter.isClosed()) counter.close();
-            }
-        } else {
-            long last;
-            if (exists(columnsStr, "double_end_timestamp")) {
-                if (remoteData.getJSONObject(0).has("double_end_timestamp")) {
-                    last = remoteData.getJSONObject(0).getLong("double_end_timestamp");
-                    Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "timestamp > " + last + " AND double_end_timestamp != 0" + study_condition, null, "_id ASC");
-                    Log.d(Aware.TAG, "Query: timestamp > " + last + " AND double_end_timestamp != 0" + study_condition);
-                    if (counter != null && counter.moveToFirst()) {
-                        TOTAL_RECORDS = counter.getCount();
-                        counter.close();
-                    }
-                    if (counter != null && !counter.isClosed()) counter.close();
-                }
-            } else if (exists(columnsStr, "double_esm_user_answer_timestamp")) {
-                if (remoteData.getJSONObject(0).has("double_esm_user_answer_timestamp")) {
-                    last = remoteData.getJSONObject(0).getLong("double_esm_user_answer_timestamp");
-                    Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "timestamp > " + last + " AND double_esm_user_answer_timestamp != 0" + study_condition, null, "_id ASC");
-                    Log.d(Aware.TAG, "Query: timestamp > " + last + " AND double_esm_user_answer_timestamp != 0" + study_condition);
-                    if (counter != null && counter.moveToFirst()) {
-                        TOTAL_RECORDS = counter.getCount();
-                        counter.close();
-                    }
-                    if (counter != null && !counter.isClosed()) counter.close();
-                }
-            } else {
-                if (remoteData.getJSONObject(0).has("timestamp")) {
-                    last = remoteData.getJSONObject(0).getLong("timestamp");
-                    Cursor counter = mContext.getContentResolver().query(CONTENT_URI, null, "timestamp > " + last + study_condition, null, "_id ASC");
-                    Log.d(Aware.TAG, "Query: timestamp > " + last + study_condition);
-                    if (counter != null && counter.moveToFirst()) {
-                        TOTAL_RECORDS = counter.getCount();
-                        counter.close();
-                    }
-                    if (counter != null && !counter.isClosed()) counter.close();
-                }
-            }
+    /**
+     * Rows of {@code CONTENT_URI} still to upload: those past the cursor, and finished where the
+     * table gates a row on a completion column.
+     *
+     * Counted rather than estimated, so the batch loop knows when it has drained the table.
+     */
+    private int getNumberOfRecordsToSync(Uri CONTENT_URI, String[] columnsStr, long cursorId,
+                                         String study_condition, Context mContext) {
+        int total = 0;
+        String selection = SyncCursor.selection(columnsStr, cursorId, study_condition);
+        Cursor counter = mContext.getContentResolver().query(CONTENT_URI,
+                new String[]{SyncCursor.ROW_ID}, selection, null, null);
+        if (counter != null) {
+            total = counter.getCount();
+            counter.close();
         }
-        return TOTAL_RECORDS;
+        if (Aware.DEBUG) Log.d(Aware.TAG, "Rows to sync where " + selection + ": " + total);
+        return total;
     }
 
-
-    private Cursor getSyncData(JSONArray remoteData, Uri CONTENT_URI, String study_condition, String[] columnsStr, int uploaded_records, Context mContext, int MAX_POST_SIZE) throws JSONException {
-        Cursor context_data = null;
-        if (remoteData.length() == 0) {
-            if (exists(columnsStr, "double_end_timestamp")) {
-                context_data = mContext.getContentResolver().query(CONTENT_URI, null, "double_end_timestamp != 0" + study_condition, null, "_id ASC LIMIT " + uploaded_records + ", " + MAX_POST_SIZE);
-            } else if (exists(columnsStr, "double_esm_user_answer_timestamp")) {
-                context_data = mContext.getContentResolver().query(CONTENT_URI, null, "double_esm_user_answer_timestamp != 0" + study_condition, null, "_id ASC LIMIT " + uploaded_records + ", " + MAX_POST_SIZE);
-            } else {
-                context_data = mContext.getContentResolver().query(CONTENT_URI, null, "1" + study_condition, null, "timestamp ASC LIMIT " + uploaded_records + ", " + MAX_POST_SIZE);
-            }
-        } else {
-            long last;
-            if (exists(columnsStr, "double_end_timestamp")) {
-                if (remoteData.getJSONObject(0).has("double_end_timestamp")) {
-                    last = remoteData.getJSONObject(0).getLong("double_end_timestamp");
-                    context_data = mContext.getContentResolver().query(CONTENT_URI, null, "timestamp > " + last + " AND double_end_timestamp != 0" + study_condition, null, "_id ASC LIMIT " + uploaded_records + ", " + MAX_POST_SIZE);
-                }
-            } else if (exists(columnsStr, "double_esm_user_answer_timestamp")) {
-                if (remoteData.getJSONObject(0).has("double_esm_user_answer_timestamp")) {
-                    last = remoteData.getJSONObject(0).getLong("double_esm_user_answer_timestamp");
-                    context_data = mContext.getContentResolver().query(CONTENT_URI, null, "timestamp > " + last + " AND double_esm_user_answer_timestamp != 0" + study_condition, null, "_id ASC LIMIT " + uploaded_records + ", " + MAX_POST_SIZE);
-                }
-            } else {
-                if (remoteData.getJSONObject(0).has("timestamp")) {
-                    last = remoteData.getJSONObject(0).getLong("timestamp");
-                    context_data = mContext.getContentResolver().query(CONTENT_URI, null, "timestamp > " + last + study_condition, null, "_id ASC LIMIT " + uploaded_records + ", " + MAX_POST_SIZE);
-                }
-            }
-        }
-        return context_data;
+    /**
+     * One batch, read from the cursor forward in insertion order.
+     *
+     * The window is decided by the cursor alone rather than by an offset into the result set, so a
+     * row inserted while this run is in flight lands after the cursor and is read by a later batch
+     * instead of shifting the rows this one takes.
+     */
+    private Cursor getSyncData(Uri CONTENT_URI, String study_condition, String[] columnsStr,
+                               long cursorId, Context mContext, int MAX_POST_SIZE) {
+        return mContext.getContentResolver().query(CONTENT_URI, null,
+                SyncCursor.selection(columnsStr, cursorId, study_condition), null,
+                SyncCursor.order(MAX_POST_SIZE));
     }
 
-    private void performDatabaseSpaceMaintenance(Uri CONTENT_URI, long last, long lastId, String[] columnsStr, Boolean WEBSERVICE_REMOVE_DATA, Context mContext, String DATABASE_TABLE, Boolean DEBUG) {
+    /**
+     * Frees local space once the server holds the rows.
+     *
+     * @param lastId  highest row id the server acknowledged in this run
+     * @param lastRun instant that acknowledged row was captured, which dates the retention windows
+     */
+    private void performDatabaseSpaceMaintenance(Uri CONTENT_URI, long lastRun, long lastId, String[] columnsStr, Boolean WEBSERVICE_REMOVE_DATA, Context mContext, String DATABASE_TABLE, Boolean DEBUG) {
         // keep records when contain end_timestamp (session-based entries), only remove the rows where the end_timestamp > 0
         String deleteSessionBasedSensors = "";
         if (exists(columnsStr, "double_end_timestamp")) {
@@ -573,11 +515,17 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
         }
 
         if (WEBSERVICE_REMOVE_DATA) {
-            mContext.getContentResolver().delete(CONTENT_URI, "timestamp <= " + last, null);
+            // Keyed on _id (insertion order) rather than timestamp (capture order), so the rows
+            // removed are the rows this run had acknowledged. A sample a sensor buffered and
+            // inserted after the batch was read carries a higher _id and an older capture time, and
+            // it stays until it has been uploaded and acknowledged itself.
+            if (lastId > 0)
+                mContext.getContentResolver().delete(CONTENT_URI,
+                        SyncCursor.ROW_ID + " <= " + lastId + deleteSessionBasedSensors, null);
 
         } else if (Aware.getSetting(mContext, Aware_Preferences.FREQUENCY_CLEAN_OLD_DATA).length() > 0) {
             Calendar cal = Calendar.getInstance();
-            cal.setTimeInMillis(last);
+            cal.setTimeInMillis(lastRun);
             int rowsDeleted = 0;
             switch (Aware.getSettingAsInt(mContext, Aware_Preferences.FREQUENCY_CLEAN_OLD_DATA, 0)) {
                 case 1: //Weekly
@@ -612,13 +560,31 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
         }
     }
 
-    private Long syncBatch(Cursor context_data, String DATABASE_TABLE, String DEVICE_ID, Context mContext, Boolean DEBUG, long[] outMaxId, int[] outRowCount) throws JSONException {
+    /**
+     * Offers one batch to the server and reports whether the server took it.
+     *
+     * {@code true} with a row count of 0 is a batch that read no rows, which is a drained table
+     * rather than a refusal.
+     *
+     * @param outMaxId        receives the highest row id the server acknowledged
+     * @param outRowCount     receives the rows the batch carried
+     * @param outLastTimestamp receives the capture time of the last acknowledged row
+     */
+    private boolean syncBatch(Cursor context_data, String DATABASE_TABLE, String DEVICE_ID, Context mContext, Boolean DEBUG, long[] outMaxId, int[] outRowCount, long[] outLastTimestamp) throws JSONException {
         JSONArray rows = new JSONArray();
         long lastSynced = 0;
         long maxId = 0;
         long payloadBytes = 0;
         boolean cappedByPayload = false;
-        if (context_data != null && context_data.moveToFirst()) {
+
+        // A read that found no rows still holds a cursor, and this runs once per table per sync
+        // event on every table that is up to date.
+        if (context_data != null && !context_data.moveToFirst()) {
+            context_data.close();
+            return true;
+        }
+
+        if (context_data != null) {
             do {
                 JSONObject row = new JSONObject();
                 long rowBytes = 0;
@@ -685,21 +651,13 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
 
             context_data.close(); // Clear phone's memory immediately
 
-            if (rows.length() == 0) return 0L;
+            if (rows.length() == 0) return true;
 
             if (DEBUG && cappedByPayload)
                 Log.d(Aware.TAG, DATABASE_TABLE + " batch capped at " + rows.length()
                         + " row(s) / ~" + (payloadBytes / 1024) + " KB by the payload budget");
 
             lastSynced = rows.getJSONObject(rows.length() - 1).getLong("timestamp"); // Last record to be synced
-            // For some tables, we must not clear everything.  Leave one row of these tables.
-            if (dontClearSensors.contains(DATABASE_TABLE)) {
-                if (rows.length() >= 2) {
-                    lastSynced = rows.getJSONObject(rows.length() - 2).getLong("timestamp"); // Last record to be synced
-                } else {
-                    lastSynced = 0;
-                }
-            }
 
             // Which path carries the rows is the study's choice, and both answer the same
             // question: did the server take them. On the webservice path the phone holds
@@ -720,15 +678,15 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
                 // participant only if it lasts. The table name is the reason: which one first failed
                 // is the useful part, and it carries no credentials.
                 UploadHealth.recordFailure(mContext, DATABASE_TABLE, "batch not acknowledged");
-                return null;
+                return false;
             } else {
                 // The batch was committed (acknowledged) by the database: report the highest _id so
-                // the caller can delete exactly these rows and nothing inserted after this read, and
-                // the row count so the caller resumes from what actually went rather than from the
-                // row-count cap it asked for.
+                // the caller advances its cursor to exactly these rows and deletes no further, the
+                // row count so it resumes from what actually went rather than from the row-count cap
+                // it asked for, and the capture time of the last row as the table's freshness.
                 outMaxId[0] = maxId;
                 outRowCount[0] = rows.length();
-                setLatestRecordSynched(DATABASE_TABLE, lastSynced);
+                outLastTimestamp[0] = lastSynced;
                 UploadHealth.recordSuccess(mContext, DATABASE_TABLE);
 
                 if (DEBUG)
@@ -736,7 +694,7 @@ public class AwareSyncAdapter extends AbstractThreadedSyncAdapter {
             }
         }
 
-        return lastSynced;
+        return true;
     }
 
 
