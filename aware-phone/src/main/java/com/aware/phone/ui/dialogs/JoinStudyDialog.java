@@ -9,7 +9,6 @@ import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -114,9 +113,8 @@ public class JoinStudyDialog extends DialogFragment {
     private void openScanner() {
         String scanner = mActivity.getPackageName() + "/" + mActivity.getPackageName()
                 + ".ui.Aware_QRCode";
-        boolean granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.M
-                || PermissionChecker.checkSelfPermission(mActivity, Manifest.permission.CAMERA)
-                        == PermissionChecker.PERMISSION_GRANTED;
+        boolean granted = PermissionChecker.checkSelfPermission(
+                mActivity, Manifest.permission.CAMERA) == PermissionChecker.PERMISSION_GRANTED;
 
         if (granted) {
             Intent qrcode = new Intent(mActivity, Aware_QRCode.class);
