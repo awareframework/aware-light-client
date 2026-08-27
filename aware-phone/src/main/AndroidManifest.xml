@@ -7,8 +7,12 @@
         <package android:name="com.aware.providers" />
     </queries>
 
+    <!-- A reinstall is a new privacy boundary: never restore the previous
+         installation's UUID, study credentials, settings, or sensor database. -->
     <application
         tools:replace="android:networkSecurityConfig"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:icon="@drawable/ic_launcher_aware"
         android:label="AWARE"
         android:theme="@style/Theme.Aware"
