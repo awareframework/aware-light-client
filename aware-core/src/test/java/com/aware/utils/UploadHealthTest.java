@@ -10,6 +10,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Unit tests for the two decisions upload health makes on its own: when a delivery failure is worth
@@ -134,6 +137,81 @@ public class UploadHealthTest {
 
         assertEquals(2, outages.size());
         assertEquals(1000L, UploadHealth.earliestOutage(outages));
+    }
+
+    @Test
+    public void parallelFailureUpdatesRetainEveryTable() throws Exception {
+        final int adapterCount = 30;
+        AtomicReference<String> stored = new AtomicReference<>("");
+        CountDownLatch ready = new CountDownLatch(adapterCount);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(adapterCount);
+
+        for (int i = 0; i < adapterCount; i++) {
+            final int adapter = i;
+            new Thread(() -> {
+                ready.countDown();
+                try {
+                    start.await();
+                    UploadHealth.withOutageStateLock(() -> {
+                        Map<String, Long> outages = UploadHealth.parseOutages(stored.get());
+                        Thread.yield();
+                        stored.set(UploadHealth.formatOutages(UploadHealth.withFailure(
+                                outages, "table_" + adapter, 1000L + adapter)));
+                    });
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    done.countDown();
+                }
+            }, "upload-health-test-" + i).start();
+        }
+
+        assertTrue(ready.await(2, TimeUnit.SECONDS));
+        start.countDown();
+        assertTrue(done.await(5, TimeUnit.SECONDS));
+
+        Map<String, Long> outages = UploadHealth.parseOutages(stored.get());
+        assertEquals(adapterCount, outages.size());
+        for (int i = 0; i < adapterCount; i++) {
+            assertTrue("parallel update lost table_" + i, outages.containsKey("table_" + i));
+        }
+    }
+
+    @Test
+    public void concurrentRecoveryDoesNotEraseAnotherTablesFailure() throws Exception {
+        AtomicReference<String> stored = new AtomicReference<>("recovering:1000");
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(2);
+
+        Thread recovery = new Thread(() -> {
+            await(start);
+            UploadHealth.withOutageStateLock(() -> stored.set(UploadHealth.formatOutages(
+                    UploadHealth.withSuccess(UploadHealth.parseOutages(stored.get()), "recovering"))));
+            done.countDown();
+        });
+        Thread failure = new Thread(() -> {
+            await(start);
+            UploadHealth.withOutageStateLock(() -> stored.set(UploadHealth.formatOutages(
+                    UploadHealth.withFailure(UploadHealth.parseOutages(stored.get()), "broken", 2000L))));
+            done.countDown();
+        });
+
+        recovery.start();
+        failure.start();
+        start.countDown();
+        assertTrue(done.await(2, TimeUnit.SECONDS));
+
+        Map<String, Long> outages = UploadHealth.parseOutages(stored.get());
+        assertEquals(Collections.singletonMap("broken", 2000L), outages);
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** A table that keeps failing must keep its original start time, not have it pushed forward. */

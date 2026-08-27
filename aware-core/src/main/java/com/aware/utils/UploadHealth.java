@@ -34,6 +34,13 @@ import java.util.TreeMap;
  */
 public final class UploadHealth {
 
+    /**
+     * All sync adapters live in this application process and can complete concurrently. The outage
+     * map and its derived settings form one logical record, so their complete read-modify-write and
+     * notification transition must be serialized rather than locking individual preference calls.
+     */
+    private static final Object OUTAGE_STATE_LOCK = new Object();
+
     private UploadHealth() {
     }
 
@@ -47,19 +54,21 @@ public final class UploadHealth {
      * itself healthy for two hours.
      */
     public static void recordSuccess(Context context, String table) {
-        Map<String, Long> outages = outages(context);
-        if (!outages.containsKey(table)) return;
+        synchronized (OUTAGE_STATE_LOCK) {
+            Map<String, Long> outages = outages(context);
+            if (!outages.containsKey(table)) return;
 
-        Map<String, Long> remaining = withSuccess(outages, table);
-        saveOutages(context, remaining);
-        Aware.debug(context, Aware.LogType.SYNC,
-                "Upload recovered for " + table + "; its data is reaching the database again");
-
-        if (remaining.isEmpty()) {
-            StudyUtils.cancelStudyNotification(context, Aware.AWARE_UPLOAD_HEALTH_NOTIFICATION_ID);
-            Aware.setSetting(context, Aware_Preferences.UPLOAD_OUTAGE_NOTIFIED, "false");
+            Map<String, Long> remaining = withSuccess(outages, table);
+            saveOutages(context, remaining);
             Aware.debug(context, Aware.LogType.SYNC,
-                    "Upload recovered; every table is reaching the database again");
+                    "Upload recovered for " + table + "; its data is reaching the database again");
+
+            if (remaining.isEmpty()) {
+                StudyUtils.cancelStudyNotification(context, Aware.AWARE_UPLOAD_HEALTH_NOTIFICATION_ID);
+                Aware.setSetting(context, Aware_Preferences.UPLOAD_OUTAGE_NOTIFIED, "false");
+                Aware.debug(context, Aware.LogType.SYNC,
+                        "Upload recovered; every table is reaching the database again");
+            }
         }
     }
 
@@ -70,33 +79,40 @@ public final class UploadHealth {
      * @param reason short, non-sensitive description of why — never a connection string or password
      */
     public static void recordFailure(Context context, String table, String reason) {
-        Map<String, Long> outages = outages(context);
+        synchronized (OUTAGE_STATE_LOCK) {
+            Map<String, Long> outages = outages(context);
 
-        if (!outages.containsKey(table)) {
-            // Edge-triggered per table: the first failure of this table's outage is the one worth
-            // recording. Later failures of the same table say the same thing.
-            saveOutages(context, withFailure(outages, table, System.currentTimeMillis()));
-            Aware.debug(context, Aware.LogType.SYNC, "Upload failing for " + table + ": " + reason);
-        }
+            if (!outages.containsKey(table)) {
+                // Edge-triggered per table: the first failure of this table's outage is the one worth
+                // recording. Later failures of the same table say the same thing.
+                outages = withFailure(outages, table, System.currentTimeMillis());
+                saveOutages(context, outages);
+                Aware.debug(context, Aware.LogType.SYNC, "Upload failing for " + table + ": " + reason);
+            }
 
-        if (shouldNotify(outageSince(context), alreadyNotified(context))) {
-            StudyUtils.postStudyNotification(context, Aware.AWARE_UPLOAD_HEALTH_NOTIFICATION_ID,
-                    R.string.aware_notif_upload_stalled_title,
-                    R.string.aware_notif_upload_stalled);
-            Aware.setSetting(context, Aware_Preferences.UPLOAD_OUTAGE_NOTIFIED, "true");
-            Aware.debug(context, Aware.LogType.SYNC,
-                    "Notified the participant that data is not reaching the database");
+            if (shouldNotify(earliestOutage(outages), alreadyNotified(context))) {
+                StudyUtils.postStudyNotification(context, Aware.AWARE_UPLOAD_HEALTH_NOTIFICATION_ID,
+                        R.string.aware_notif_upload_stalled_title,
+                        R.string.aware_notif_upload_stalled);
+                Aware.setSetting(context, Aware_Preferences.UPLOAD_OUTAGE_NOTIFIED, "true");
+                Aware.debug(context, Aware.LogType.SYNC,
+                        "Notified the participant that data is not reaching the database");
+            }
         }
     }
 
     /** Whether this table specifically is failing to deliver. */
     public static boolean isFailing(Context context, String table) {
-        return outages(context).containsKey(table);
+        synchronized (OUTAGE_STATE_LOCK) {
+            return outages(context).containsKey(table);
+        }
     }
 
     /** The tables currently failing to deliver, alphabetically; empty when delivery is healthy. */
     public static List<String> failingTables(Context context) {
-        return new ArrayList<>(outages(context).keySet());
+        synchronized (OUTAGE_STATE_LOCK) {
+            return new ArrayList<>(outages(context).keySet());
+        }
     }
 
     private static Map<String, Long> outages(Context context) {
@@ -153,6 +169,13 @@ public final class UploadHealth {
         Map<String, Long> updated = new TreeMap<>(outages);
         updated.remove(table);
         return updated;
+    }
+
+    /** Uses the same critical section as production state updates for concurrency regression tests. */
+    static void withOutageStateLock(Runnable operation) {
+        synchronized (OUTAGE_STATE_LOCK) {
+            operation.run();
+        }
     }
 
     /** When delivery first stopped being wholly healthy, or 0 when no table is failing. */
@@ -225,7 +248,9 @@ public final class UploadHealth {
 
     /** When the current outage began, or 0 when delivery is healthy. */
     public static long outageSince(Context context) {
-        return parseLong(Aware.getSetting(context, Aware_Preferences.UPLOAD_OUTAGE_SINCE));
+        synchronized (OUTAGE_STATE_LOCK) {
+            return parseLong(Aware.getSetting(context, Aware_Preferences.UPLOAD_OUTAGE_SINCE));
+        }
     }
 
     /**
@@ -260,8 +285,10 @@ public final class UploadHealth {
 
     /** Why delivery is currently failing, or an empty string when it is not. */
     public static String outageReason(Context context) {
-        String reason = Aware.getSetting(context, Aware_Preferences.UPLOAD_OUTAGE_REASON);
-        return reason == null ? "" : reason;
+        synchronized (OUTAGE_STATE_LOCK) {
+            String reason = Aware.getSetting(context, Aware_Preferences.UPLOAD_OUTAGE_REASON);
+            return reason == null ? "" : reason;
+        }
     }
 
     private static boolean alreadyNotified(Context context) {
