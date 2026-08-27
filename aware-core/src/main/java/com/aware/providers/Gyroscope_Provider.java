@@ -17,6 +17,7 @@ import android.util.Log;
 import com.aware.Aware;
 import com.aware.Barometer;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -139,29 +140,28 @@ public class Gyroscope_Provider extends ContentProvider {
         initialiseDatabase();
 
         //lock database for transaction
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case GYRO_DEV:
-                count = database.delete(DATABASE_TABLES[0], selection,
-                        selectionArgs);
-                break;
-            case GYRO_DATA:
-                count = database.delete(DATABASE_TABLES[1], selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case GYRO_DEV:
+                    count = database.delete(DATABASE_TABLES[0], selection,
+                            selectionArgs);
+                    break;
+                case GYRO_DATA:
+                    count = database.delete(DATABASE_TABLES[1], selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-
-        return count;
     }
 
     @Override
@@ -190,38 +190,34 @@ public class Gyroscope_Provider extends ContentProvider {
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        switch (sUriMatcher.match(uri)) {
-            case GYRO_DEV:
-                long gyro_id = database.insertWithOnConflict(DATABASE_TABLES[0],
-                        Gyroscope_Sensor.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (gyro_id > 0) {
-                    Uri gyroUri = ContentUris.withAppendedId(
-                            Gyroscope_Sensor.CONTENT_URI, gyro_id);
-                    getContext().getContentResolver().notifyChange(gyroUri, null, false);
-                    return gyroUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case GYRO_DATA:
-                long gyroData_id = database.insertWithOnConflict(DATABASE_TABLES[1],
-                        Gyroscope_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (gyroData_id > 0) {
-                    Uri gyroDataUri = ContentUris.withAppendedId(
-                            Gyroscope_Data.CONTENT_URI, gyroData_id);
-                    getContext().getContentResolver().notifyChange(gyroDataUri,null, false);
-                    return gyroDataUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            switch (sUriMatcher.match(uri)) {
+                case GYRO_DEV:
+                    long gyro_id = database.insertWithOnConflict(DATABASE_TABLES[0],
+                            Gyroscope_Sensor.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (gyro_id > 0) {
+                        Uri gyroUri = ContentUris.withAppendedId(
+                                Gyroscope_Sensor.CONTENT_URI, gyro_id);
+                        getContext().getContentResolver().notifyChange(gyroUri, null, false);
+                        return gyroUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case GYRO_DATA:
+                    long gyroData_id = database.insertWithOnConflict(DATABASE_TABLES[1],
+                            Gyroscope_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (gyroData_id > 0) {
+                        Uri gyroDataUri = ContentUris.withAppendedId(
+                                Gyroscope_Data.CONTENT_URI, gyroData_id);
+                        getContext().getContentResolver().notifyChange(gyroDataUri,null, false);
+                        return gyroDataUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
         }
     }
 
@@ -237,51 +233,50 @@ public class Gyroscope_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case GYRO_DEV:
-                for (ContentValues v : values) {
-                    long id;
-                    try {
-                        id = database.insertOrThrow(DATABASE_TABLES[0], Gyroscope_Sensor.DEVICE_ID, v);
-                    } catch (SQLException e) {
-                        id = database.replace(DATABASE_TABLES[0], Gyroscope_Sensor.DEVICE_ID, v);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case GYRO_DEV:
+                    for (ContentValues v : values) {
+                        long id;
+                        try {
+                            id = database.insertOrThrow(DATABASE_TABLES[0], Gyroscope_Sensor.DEVICE_ID, v);
+                        } catch (SQLException e) {
+                            id = database.replace(DATABASE_TABLES[0], Gyroscope_Sensor.DEVICE_ID, v);
+                        }
+                        if (id <= 0) {
+                            Log.w(Barometer.TAG, "Failed to insert/replace row into " + uri);
+                        } else {
+                            count++;
+                        }
                     }
-                    if (id <= 0) {
-                        Log.w(Barometer.TAG, "Failed to insert/replace row into " + uri);
-                    } else {
-                        count++;
+                    break;
+                case GYRO_DATA:
+                    for (ContentValues v : values) {
+                        long id;
+                        try {
+                            id = database.insertOrThrow(DATABASE_TABLES[1], Gyroscope_Data.DEVICE_ID, v);
+                        } catch (SQLException e) {
+                            id = database.replace(DATABASE_TABLES[1], Gyroscope_Data.DEVICE_ID, v);
+                        }
+                        if (id <= 0) {
+                            Log.w(Barometer.TAG, "Failed to insert/replace row into " + uri);
+                        } else {
+                            count++;
+                        }
                     }
-                }
-                break;
-            case GYRO_DATA:
-                for (ContentValues v : values) {
-                    long id;
-                    try {
-                        id = database.insertOrThrow(DATABASE_TABLES[1], Gyroscope_Data.DEVICE_ID, v);
-                    } catch (SQLException e) {
-                        id = database.replace(DATABASE_TABLES[1], Gyroscope_Data.DEVICE_ID, v);
-                    }
-                    if (id <= 0) {
-                        Log.w(Barometer.TAG, "Failed to insert/replace row into " + uri);
-                    } else {
-                        count++;
-                    }
-                }
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-
-        return count;
     }
 
     /**
@@ -370,7 +365,7 @@ public class Gyroscope_Provider extends ContentProvider {
             if (Aware.DEBUG)
                 Log.e(Aware.TAG, e.getMessage());
 
-            return null;
+            throw e;
         }
     }
 
@@ -383,27 +378,26 @@ public class Gyroscope_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case GYRO_DEV:
-                count = database.update(DATABASE_TABLES[0], values, selection,
-                        selectionArgs);
-                break;
-            case GYRO_DATA:
-                count = database.update(DATABASE_TABLES[1], values, selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case GYRO_DEV:
+                    count = database.update(DATABASE_TABLES[0], values, selection,
+                            selectionArgs);
+                    break;
+                case GYRO_DATA:
+                    count = database.update(DATABASE_TABLES[1], values, selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 }

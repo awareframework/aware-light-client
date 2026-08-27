@@ -17,6 +17,7 @@ import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -282,41 +283,39 @@ public class Aware_Provider extends ContentProvider {
     public synchronized int delete(Uri uri, String selection, String[] selectionArgs) {
 
         initialiseDatabase();
-        if (database == null) return 0;
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case DEVICE_INFO:
-                count = database.delete(DATABASE_TABLES[0], selection, selectionArgs);
-                break;
-            case SETTING:
-                count = database.delete(DATABASE_TABLES[1], selection, selectionArgs);
-                break;
-            case PLUGIN:
-                count = database.delete(DATABASE_TABLES[2], selection, selectionArgs);
-                break;
-            case STUDY:
-                count = database.delete(DATABASE_TABLES[3], selection, selectionArgs);
-                break;
-            case LOG:
-                count = database.delete(DATABASE_TABLES[4], selection, selectionArgs);
-                break;
-            case SYNC_MARKER:
-                count = database.delete(DATABASE_TABLES[5], selection, selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case DEVICE_INFO:
+                    count = database.delete(DATABASE_TABLES[0], selection, selectionArgs);
+                    break;
+                case SETTING:
+                    count = database.delete(DATABASE_TABLES[1], selection, selectionArgs);
+                    break;
+                case PLUGIN:
+                    count = database.delete(DATABASE_TABLES[2], selection, selectionArgs);
+                    break;
+                case STUDY:
+                    count = database.delete(DATABASE_TABLES[3], selection, selectionArgs);
+                    break;
+                case LOG:
+                    count = database.delete(DATABASE_TABLES[4], selection, selectionArgs);
+                    break;
+                case SYNC_MARKER:
+                    count = database.delete(DATABASE_TABLES[5], selection, selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-
-        return count;
     }
 
     @Override
@@ -358,86 +357,73 @@ public class Aware_Provider extends ContentProvider {
     public synchronized Uri insert(Uri uri, ContentValues initialValues) {
 
         initialiseDatabase();
-        if (database == null) throw new SQLException("Failed to read database: " + uri);
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        switch (sUriMatcher.match(uri)) {
-            case DEVICE_INFO:
-                long dev_id = database.insertWithOnConflict(DATABASE_TABLES[0], Aware_Device.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                if (dev_id > 0) {
-                    Uri devUri = ContentUris.withAppendedId(
-                            Aware_Device.CONTENT_URI, dev_id);
-                    getContext().getContentResolver().notifyChange(devUri, null, false);
-                    database.setTransactionSuccessful();
-                    database.endTransaction();
-                    return devUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case SETTING:
-                long sett_id = database.insertWithOnConflict(DATABASE_TABLES[1], Aware_Settings.SETTING_KEY, values, SQLiteDatabase.CONFLICT_IGNORE);
-                if (sett_id > 0) {
-                    Uri settUri = ContentUris.withAppendedId(
-                            Aware_Settings.CONTENT_URI, sett_id);
-                    getContext().getContentResolver().notifyChange(settUri, null, false);
-                    database.setTransactionSuccessful();
-                    database.endTransaction();
-                    return settUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case PLUGIN:
-                long plug_id = database.insertWithOnConflict(DATABASE_TABLES[2], Aware_Plugins.PLUGIN_NAME, values, SQLiteDatabase.CONFLICT_IGNORE);
-                if (plug_id > 0) {
-                    Uri settUri = ContentUris.withAppendedId(Aware_Plugins.CONTENT_URI, plug_id);
-                    getContext().getContentResolver().notifyChange(settUri, null, false);
-                    database.setTransactionSuccessful();
-                    database.endTransaction();
-                    return settUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case STUDY:
-                long study_id = database.insertWithOnConflict(DATABASE_TABLES[3], Aware_Studies.STUDY_DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                if (study_id > 0) {
-                    Uri settUri = ContentUris.withAppendedId(Aware_Studies.CONTENT_URI, study_id);
-                    getContext().getContentResolver().notifyChange(settUri, null, false);
-                    database.setTransactionSuccessful();
-                    database.endTransaction();
-                    return settUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case LOG:
-                long log_id = database.insertWithOnConflict(DATABASE_TABLES[4], Aware_Log.LOG_DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                if (log_id > 0) {
-                    Uri settUri = ContentUris.withAppendedId(Aware_Log.CONTENT_URI, log_id);
-                    getContext().getContentResolver().notifyChange(settUri, null, false);
-                    database.setTransactionSuccessful();
-                    database.endTransaction();
-                    return settUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case SYNC_MARKER:
-                // CONFLICT_REPLACE, so writing a table's marker supersedes its previous one and the
-                // table holds one row per synced table.
-                long marker_id = database.insertWithOnConflict(DATABASE_TABLES[5], Aware_Sync_Markers.MARKER_TABLE, values, SQLiteDatabase.CONFLICT_REPLACE);
-                if (marker_id > 0) {
-                    Uri markerUri = ContentUris.withAppendedId(Aware_Sync_Markers.CONTENT_URI, marker_id);
-                    getContext().getContentResolver().notifyChange(markerUri, null, false);
-                    database.setTransactionSuccessful();
-                    database.endTransaction();
-                    return markerUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            switch (sUriMatcher.match(uri)) {
+                case DEVICE_INFO:
+                    long dev_id = database.insertWithOnConflict(DATABASE_TABLES[0], Aware_Device.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    if (dev_id > 0) {
+                        Uri devUri = ContentUris.withAppendedId(
+                                Aware_Device.CONTENT_URI, dev_id);
+                        transaction.commit();
+                        getContext().getContentResolver().notifyChange(devUri, null, false);
+                        return devUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case SETTING:
+                    long sett_id = database.insertWithOnConflict(DATABASE_TABLES[1], Aware_Settings.SETTING_KEY, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    if (sett_id > 0) {
+                        Uri settUri = ContentUris.withAppendedId(
+                                Aware_Settings.CONTENT_URI, sett_id);
+                        transaction.commit();
+                        getContext().getContentResolver().notifyChange(settUri, null, false);
+                        return settUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case PLUGIN:
+                    long plug_id = database.insertWithOnConflict(DATABASE_TABLES[2], Aware_Plugins.PLUGIN_NAME, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    if (plug_id > 0) {
+                        Uri settUri = ContentUris.withAppendedId(Aware_Plugins.CONTENT_URI, plug_id);
+                        transaction.commit();
+                        getContext().getContentResolver().notifyChange(settUri, null, false);
+                        return settUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case STUDY:
+                    long study_id = database.insertWithOnConflict(DATABASE_TABLES[3], Aware_Studies.STUDY_DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    if (study_id > 0) {
+                        Uri settUri = ContentUris.withAppendedId(Aware_Studies.CONTENT_URI, study_id);
+                        transaction.commit();
+                        getContext().getContentResolver().notifyChange(settUri, null, false);
+                        return settUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case LOG:
+                    long log_id = database.insertWithOnConflict(DATABASE_TABLES[4], Aware_Log.LOG_DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    if (log_id > 0) {
+                        Uri settUri = ContentUris.withAppendedId(Aware_Log.CONTENT_URI, log_id);
+                        transaction.commit();
+                        getContext().getContentResolver().notifyChange(settUri, null, false);
+                        return settUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case SYNC_MARKER:
+                    // CONFLICT_REPLACE, so writing a table's marker supersedes its previous one and the
+                    // table holds one row per synced table.
+                    long marker_id = database.insertWithOnConflict(DATABASE_TABLES[5], Aware_Sync_Markers.MARKER_TABLE, values, SQLiteDatabase.CONFLICT_REPLACE);
+                    if (marker_id > 0) {
+                        Uri markerUri = ContentUris.withAppendedId(Aware_Sync_Markers.CONTENT_URI, marker_id);
+                        transaction.commit();
+                        getContext().getContentResolver().notifyChange(markerUri, null, false);
+                        return markerUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
         }
     }
 
@@ -539,7 +525,6 @@ public class Aware_Provider extends ContentProvider {
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
 
         initialiseDatabase();
-        if (database == null) return null;
 
         SQLiteQueryBuilder qb = new SQLiteQueryBuilder();
         qb.setStrict(true);
@@ -577,7 +562,7 @@ public class Aware_Provider extends ContentProvider {
             return c;
         } catch (IllegalStateException e) {
             if (Aware.DEBUG) Log.e(Aware.TAG, e.getMessage());
-            return null;
+            throw e;
         }
     }
 
@@ -588,40 +573,38 @@ public class Aware_Provider extends ContentProvider {
     public synchronized int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
 
         initialiseDatabase();
-        if (database == null) return 0;
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case DEVICE_INFO:
-                count = database.update(DATABASE_TABLES[0], values, selection, selectionArgs);
-                break;
-            case SETTING:
-                count = database.update(DATABASE_TABLES[1], values, selection, selectionArgs);
-                break;
-            case PLUGIN:
-                count = database.update(DATABASE_TABLES[2], values, selection, selectionArgs);
-                break;
-            case STUDY:
-                count = database.update(DATABASE_TABLES[3], values, selection, selectionArgs);
-                break;
-            case LOG:
-                count = database.update(DATABASE_TABLES[4], values, selection, selectionArgs);
-                break;
-            case SYNC_MARKER:
-                count = database.update(DATABASE_TABLES[5], values, selection, selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case DEVICE_INFO:
+                    count = database.update(DATABASE_TABLES[0], values, selection, selectionArgs);
+                    break;
+                case SETTING:
+                    count = database.update(DATABASE_TABLES[1], values, selection, selectionArgs);
+                    break;
+                case PLUGIN:
+                    count = database.update(DATABASE_TABLES[2], values, selection, selectionArgs);
+                    break;
+                case STUDY:
+                    count = database.update(DATABASE_TABLES[3], values, selection, selectionArgs);
+                    break;
+                case LOG:
+                    count = database.update(DATABASE_TABLES[4], values, selection, selectionArgs);
+                    break;
+                case SYNC_MARKER:
+                    count = database.update(DATABASE_TABLES[5], values, selection, selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-
-        return count;
     }
 }

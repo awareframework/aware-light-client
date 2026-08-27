@@ -16,6 +16,7 @@ import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -126,28 +127,27 @@ public class Communication_Provider extends ContentProvider {
         initialiseDatabase();
 
         //lock database for transaction
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case CALLS:
-                count = database.delete(DATABASE_TABLES[0], selection,
-                        selectionArgs);
-                break;
-            case MESSAGES:
-                count = database.delete(DATABASE_TABLES[1], selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case CALLS:
+                    count = database.delete(DATABASE_TABLES[0], selection,
+                            selectionArgs);
+                    break;
+                case MESSAGES:
+                    count = database.delete(DATABASE_TABLES[1], selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 
     @Override
@@ -176,38 +176,34 @@ public class Communication_Provider extends ContentProvider {
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        switch (sUriMatcher.match(uri)) {
-            case CALLS:
-                long call_id = database.insertWithOnConflict(DATABASE_TABLES[0],
-                        Calls_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (call_id > 0) {
-                    Uri callsUri = ContentUris.withAppendedId(
-                            Calls_Data.CONTENT_URI, call_id);
-                    getContext().getContentResolver().notifyChange(callsUri, null, false);
-                    return callsUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case MESSAGES:
-                long message_id = database.insertWithOnConflict(DATABASE_TABLES[1],
-                        Messages_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (message_id > 0) {
-                    Uri messagesUri = ContentUris.withAppendedId(
-                            Messages_Data.CONTENT_URI, message_id);
-                    getContext().getContentResolver().notifyChange(messagesUri, null, false);
-                    return messagesUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            switch (sUriMatcher.match(uri)) {
+                case CALLS:
+                    long call_id = database.insertWithOnConflict(DATABASE_TABLES[0],
+                            Calls_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (call_id > 0) {
+                        Uri callsUri = ContentUris.withAppendedId(
+                                Calls_Data.CONTENT_URI, call_id);
+                        getContext().getContentResolver().notifyChange(callsUri, null, false);
+                        return callsUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case MESSAGES:
+                    long message_id = database.insertWithOnConflict(DATABASE_TABLES[1],
+                            Messages_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (message_id > 0) {
+                        Uri messagesUri = ContentUris.withAppendedId(
+                                Messages_Data.CONTENT_URI, message_id);
+                        getContext().getContentResolver().notifyChange(messagesUri, null, false);
+                        return messagesUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
         }
     }
 
@@ -287,7 +283,7 @@ public class Communication_Provider extends ContentProvider {
             if (Aware.DEBUG)
                 Log.e(Aware.TAG, e.getMessage());
 
-            return null;
+            throw e;
         }
     }
 
@@ -300,27 +296,26 @@ public class Communication_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case CALLS:
-                count = database.update(DATABASE_TABLES[0], values, selection,
-                        selectionArgs);
-                break;
-            case MESSAGES:
-                count = database.update(DATABASE_TABLES[1], values, selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case CALLS:
+                    count = database.update(DATABASE_TABLES[0], values, selection,
+                            selectionArgs);
+                    break;
+                case MESSAGES:
+                    count = database.update(DATABASE_TABLES[1], values, selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 }

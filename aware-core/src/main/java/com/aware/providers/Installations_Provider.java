@@ -16,6 +16,7 @@ import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -101,24 +102,23 @@ public class Installations_Provider extends ContentProvider {
         initialiseDatabase();
 
         //lock database for transaction
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case INSTALLATIONS:
-                count = database.delete(DATABASE_TABLES[0], selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case INSTALLATIONS:
+                    count = database.delete(DATABASE_TABLES[0], selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 
     @Override
@@ -143,26 +143,24 @@ public class Installations_Provider extends ContentProvider {
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
 
-        switch (sUriMatcher.match(uri)) {
-            case INSTALLATIONS:
-                long installations_id = database.insertWithOnConflict(DATABASE_TABLES[0],
-                        Installations_Data.PACKAGE_NAME, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (installations_id > 0) {
-                    Uri installationsUri = ContentUris.withAppendedId(
-                            Installations_Data.CONTENT_URI, installations_id);
-                    getContext().getContentResolver().notifyChange(installationsUri, null, false);
-                    return installationsUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            switch (sUriMatcher.match(uri)) {
+                case INSTALLATIONS:
+                    long installations_id = database.insertWithOnConflict(DATABASE_TABLES[0],
+                            Installations_Data.PACKAGE_NAME, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (installations_id > 0) {
+                        Uri installationsUri = ContentUris.withAppendedId(
+                                Installations_Data.CONTENT_URI, installations_id);
+                        getContext().getContentResolver().notifyChange(installationsUri, null, false);
+                        return installationsUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
         }
     }
 
@@ -225,7 +223,7 @@ public class Installations_Provider extends ContentProvider {
         } catch (IllegalStateException e) {
             if (Aware.DEBUG)
                 Log.e(Aware.TAG, e.getMessage());
-            return null;
+            throw e;
         }
     }
 
@@ -238,23 +236,22 @@ public class Installations_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case INSTALLATIONS:
-                count = database.update(DATABASE_TABLES[0], values, selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case INSTALLATIONS:
+                    count = database.update(DATABASE_TABLES[0], values, selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 }

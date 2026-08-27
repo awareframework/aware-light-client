@@ -16,6 +16,7 @@ import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -85,24 +86,23 @@ public class Scheduler_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case SCHEDULER:
-                count = database.delete(DATABASE_TABLES[0], selection, selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case SCHEDULER:
+                    count = database.delete(DATABASE_TABLES[0], selection, selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-
-        return count;
     }
 
     @Override
@@ -127,23 +127,21 @@ public class Scheduler_Provider extends ContentProvider {
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        switch (sUriMatcher.match(uri)) {
-            case SCHEDULER:
-                long screen_id = database.insertWithOnConflict(DATABASE_TABLES[0], Scheduler_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                if (screen_id > 0) {
-                    Uri screenUri = ContentUris.withAppendedId(Scheduler_Data.CONTENT_URI, screen_id);
-                    getContext().getContentResolver().notifyChange(screenUri, null, false);
-                    database.setTransactionSuccessful();
-                    database.endTransaction();
-                    return screenUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            switch (sUriMatcher.match(uri)) {
+                case SCHEDULER:
+                    long screen_id = database.insertWithOnConflict(DATABASE_TABLES[0], Scheduler_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    if (screen_id > 0) {
+                        Uri screenUri = ContentUris.withAppendedId(Scheduler_Data.CONTENT_URI, screen_id);
+                        transaction.commit();
+                        getContext().getContentResolver().notifyChange(screenUri, null, false);
+                        return screenUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
         }
     }
 
@@ -200,7 +198,7 @@ public class Scheduler_Provider extends ContentProvider {
             return c;
         } catch (IllegalStateException e) {
             if (Aware.DEBUG) Log.e(Aware.TAG, e.getMessage());
-            return null;
+            throw e;
         }
     }
 
@@ -212,23 +210,22 @@ public class Scheduler_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case SCHEDULER:
-                count = database.update(DATABASE_TABLES[0], values, selection, selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case SCHEDULER:
+                    count = database.update(DATABASE_TABLES[0], values, selection, selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-
-        return count;
     }
 }

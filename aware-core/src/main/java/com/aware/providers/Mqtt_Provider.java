@@ -16,6 +16,7 @@ import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -115,28 +116,27 @@ public class Mqtt_Provider extends ContentProvider {
 		initialiseDatabase();
 
 		//lock database for transaction
-		database.beginTransaction();
+		try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-		int count;
-		switch (sUriMatcher.match(uri)) {
-		case MQTT:
-			count = database.delete(DATABASE_TABLES[0], selection,
-					selectionArgs);
-			break;
-		case MQTT_SUBSCRIPTION:
-			count = database.delete(DATABASE_TABLES[1], selection,
-					selectionArgs);
-			break;
-		default:
-			database.endTransaction();
-			throw new IllegalArgumentException("Unknown URI " + uri);
+    		int count;
+    		switch (sUriMatcher.match(uri)) {
+    		case MQTT:
+    			count = database.delete(DATABASE_TABLES[0], selection,
+    					selectionArgs);
+    			break;
+    		case MQTT_SUBSCRIPTION:
+    			count = database.delete(DATABASE_TABLES[1], selection,
+    					selectionArgs);
+    			break;
+    		default:
+    			throw new IllegalArgumentException("Unknown URI " + uri);
+    		}
+
+    		transaction.commit();
+
+    		getContext().getContentResolver().notifyChange(uri, null, false);
+    		return count;
 		}
-
-		database.setTransactionSuccessful();
-		database.endTransaction();
-
-		getContext().getContentResolver().notifyChange(uri, null, false);
-		return count;
 	}
 
 	@Override
@@ -165,39 +165,35 @@ public class Mqtt_Provider extends ContentProvider {
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-		switch (sUriMatcher.match(uri)) {
-		case MQTT:
-			long mqtt_id = database.insertWithOnConflict(DATABASE_TABLES[0],
-					Mqtt_Messages.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-            database.setTransactionSuccessful();
-            database.endTransaction();
-			if (mqtt_id > 0) {
-				Uri mqttUri = ContentUris.withAppendedId(
-						Mqtt_Messages.CONTENT_URI, mqtt_id);
-				getContext().getContentResolver().notifyChange(mqttUri, null, false);
-				return mqttUri;
-			}
-            database.endTransaction();
-			throw new SQLException("Failed to insert row into " + uri);
-		case MQTT_SUBSCRIPTION:
-			long mqtt_sub_id = database.insertWithOnConflict(DATABASE_TABLES[1],
-					Mqtt_Subscriptions.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-            database.setTransactionSuccessful();
-            database.endTransaction();
-			if (mqtt_sub_id > 0) {
-				Uri mqttSubUri = ContentUris.withAppendedId(
-						Mqtt_Subscriptions.CONTENT_URI, mqtt_sub_id);
-				getContext().getContentResolver().notifyChange(mqttSubUri, null, false);
-				return mqttSubUri;
-			}
-            database.endTransaction();
-			throw new SQLException("Failed to insert row into " + uri);
-		default:
-            database.endTransaction();
-			throw new IllegalArgumentException("Unknown URI " + uri);
-		}
+    		switch (sUriMatcher.match(uri)) {
+    		case MQTT:
+    			long mqtt_id = database.insertWithOnConflict(DATABASE_TABLES[0],
+    					Mqtt_Messages.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                transaction.commit();
+    			if (mqtt_id > 0) {
+    				Uri mqttUri = ContentUris.withAppendedId(
+    						Mqtt_Messages.CONTENT_URI, mqtt_id);
+    				getContext().getContentResolver().notifyChange(mqttUri, null, false);
+    				return mqttUri;
+    			}
+    			throw new SQLException("Failed to insert row into " + uri);
+    		case MQTT_SUBSCRIPTION:
+    			long mqtt_sub_id = database.insertWithOnConflict(DATABASE_TABLES[1],
+    					Mqtt_Subscriptions.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                transaction.commit();
+    			if (mqtt_sub_id > 0) {
+    				Uri mqttSubUri = ContentUris.withAppendedId(
+    						Mqtt_Subscriptions.CONTENT_URI, mqtt_sub_id);
+    				getContext().getContentResolver().notifyChange(mqttSubUri, null, false);
+    				return mqttSubUri;
+    			}
+    			throw new SQLException("Failed to insert row into " + uri);
+    		default:
+    			throw new IllegalArgumentException("Unknown URI " + uri);
+    		}
+        }
 	}
 
 	/**
@@ -274,7 +270,7 @@ public class Mqtt_Provider extends ContentProvider {
 			if (Aware.DEBUG)
 				Log.e(Aware.TAG, e.getMessage());
 
-			return null;
+			throw e;
 		}
 	}
 
@@ -287,27 +283,26 @@ public class Mqtt_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 	    
-		int count = 0;
-		switch (sUriMatcher.match(uri)) {
-		case MQTT:
-			count = database.update(DATABASE_TABLES[0], values, selection,
-					selectionArgs);
-			break;
-		case MQTT_SUBSCRIPTION:
-			count = database.update(DATABASE_TABLES[1], values, selection,
-					selectionArgs);
-			break;
-		default:
-            database.endTransaction();
-			throw new IllegalArgumentException("Unknown URI " + uri);
-		}
+    		int count = 0;
+    		switch (sUriMatcher.match(uri)) {
+    		case MQTT:
+    			count = database.update(DATABASE_TABLES[0], values, selection,
+    					selectionArgs);
+    			break;
+    		case MQTT_SUBSCRIPTION:
+    			count = database.update(DATABASE_TABLES[1], values, selection,
+    					selectionArgs);
+    			break;
+    		default:
+    			throw new IllegalArgumentException("Unknown URI " + uri);
+    		}
 
-        database.setTransactionSuccessful();
-        database.endTransaction();
+            transaction.commit();
 
-		getContext().getContentResolver().notifyChange(uri, null, false);
-		return count;
+    		getContext().getContentResolver().notifyChange(uri, null, false);
+    		return count;
+        }
 	}
 }

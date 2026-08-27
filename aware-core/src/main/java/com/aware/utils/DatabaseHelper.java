@@ -300,7 +300,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             }
 
             database = getDatabaseFile();
-            if (database == null) return null;
 
             int current_version = database.getVersion();
             if (current_version != newVersion) {
@@ -333,23 +332,18 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 }
                 database = null;
             }
-            return null;
+            SQLiteException failure = new SQLiteException("Failed to open " + databaseName
+                    + " at version " + newVersion + ": " + e.getMessage());
+            failure.initCause(e);
+            throw failure;
         }
     }
 
     @Override
     public synchronized SQLiteDatabase getReadableDatabase() {
-        try {
-            if (database != null) {
-                if (!database.isOpen()) {
-                    database = null;
-                }
-            }
-            database = getDatabaseFile();
-            return database;
-        } catch (Exception e) {
-            return null;
-        }
+        // This helper has no read-only fallback: openOrCreateDatabase() always requests a writable
+        // handle. Reuse the checked path so reads cannot observe a schema whose migration failed.
+        return getWritableDatabase();
     }
 
     /**
@@ -384,7 +378,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             database = SQLiteDatabase.openOrCreateDatabase(new File(aware_folder, this.databaseName).getPath(), this.cursorFactory);
             return database;
         } catch (SQLiteException e) {
-            return null;
+            Log.e(TAG, "Failed to open database file " + databaseName + ": " + e.getMessage());
+            throw e;
         }
     }
 

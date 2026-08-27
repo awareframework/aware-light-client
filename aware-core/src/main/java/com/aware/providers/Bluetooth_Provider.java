@@ -16,6 +16,7 @@ import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -131,28 +132,27 @@ public class Bluetooth_Provider extends ContentProvider {
         initialiseDatabase();
 
         //lock database for transaction
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case BT_DEV:
-                count = database.delete(DATABASE_TABLES[0], selection,
-                        selectionArgs);
-                break;
-            case BT_DATA:
-                count = database.delete(DATABASE_TABLES[1], selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case BT_DEV:
+                    count = database.delete(DATABASE_TABLES[0], selection,
+                            selectionArgs);
+                    break;
+                case BT_DATA:
+                    count = database.delete(DATABASE_TABLES[1], selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 
     @Override
@@ -181,38 +181,34 @@ public class Bluetooth_Provider extends ContentProvider {
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        switch (sUriMatcher.match(uri)) {
-            case BT_DEV:
-                long rowId = database.insertWithOnConflict(DATABASE_TABLES[0],
-                        Bluetooth_Sensor.BT_NAME, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (rowId > 0) {
-                    Uri bluetoothUri = ContentUris.withAppendedId(
-                            Bluetooth_Sensor.CONTENT_URI, rowId);
-                    getContext().getContentResolver().notifyChange(bluetoothUri,null,false);
-                    return bluetoothUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case BT_DATA:
-                long btId = database.insertWithOnConflict(DATABASE_TABLES[1],
-                        Bluetooth_Data.BT_NAME, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (btId > 0) {
-                    Uri bluetoothUri = ContentUris.withAppendedId(
-                            Bluetooth_Data.CONTENT_URI, btId);
-                    getContext().getContentResolver().notifyChange(bluetoothUri,null,false);
-                    return bluetoothUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            switch (sUriMatcher.match(uri)) {
+                case BT_DEV:
+                    long rowId = database.insertWithOnConflict(DATABASE_TABLES[0],
+                            Bluetooth_Sensor.BT_NAME, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (rowId > 0) {
+                        Uri bluetoothUri = ContentUris.withAppendedId(
+                                Bluetooth_Sensor.CONTENT_URI, rowId);
+                        getContext().getContentResolver().notifyChange(bluetoothUri,null,false);
+                        return bluetoothUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case BT_DATA:
+                    long btId = database.insertWithOnConflict(DATABASE_TABLES[1],
+                            Bluetooth_Data.BT_NAME, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (btId > 0) {
+                        Uri bluetoothUri = ContentUris.withAppendedId(
+                                Bluetooth_Data.CONTENT_URI, btId);
+                        getContext().getContentResolver().notifyChange(bluetoothUri,null,false);
+                        return bluetoothUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
         }
     }
 
@@ -299,7 +295,7 @@ public class Bluetooth_Provider extends ContentProvider {
             if (Aware.DEBUG)
                 Log.e(Aware.TAG, e.getMessage());
 
-            return null;
+            throw e;
         }
     }
 
@@ -312,27 +308,26 @@ public class Bluetooth_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case BT_DEV:
-                count = database.update(DATABASE_TABLES[0], values, selection,
-                        selectionArgs);
-                break;
-            case BT_DATA:
-                count = database.update(DATABASE_TABLES[1], values, selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case BT_DEV:
+                    count = database.update(DATABASE_TABLES[0], values, selection,
+                            selectionArgs);
+                    break;
+                case BT_DATA:
+                    count = database.update(DATABASE_TABLES[1], values, selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 }

@@ -20,6 +20,7 @@ import androidx.annotation.Nullable;
 import com.aware.Aware;
 import com.aware.ScreenShot;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 import java.util.Objects;
@@ -106,25 +107,23 @@ public class ScreenShot_Provider extends ContentProvider {
         byte[] imageData = values.getAsByteArray(ScreenshotData.IMAGE_DATA);
         int imageSize = (imageData != null) ? imageData.length : 0;
 
-        database.beginTransaction();
-        switch (sUriMatcher.match(uri)){
-            case SCREENSHOT:
-                long screen_shot_id = database.insertWithOnConflict(DATABASE_TABLES[0],
-                        ScreenShot_Provider.ScreenshotData.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                if (screen_shot_id > 0) {
-                    Uri screenShotUri = ContentUris.withAppendedId(ScreenshotData.CONTENT_URI, screen_shot_id);
-                    Objects.requireNonNull(getContext()).getContentResolver().notifyChange(screenShotUri, null, false);
-                    database.setTransactionSuccessful();
-                    database.endTransaction();
-                    return screenShotUri;
-                }
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
+            switch (sUriMatcher.match(uri)){
+                case SCREENSHOT:
+                    long screen_shot_id = database.insertWithOnConflict(DATABASE_TABLES[0],
+                            ScreenShot_Provider.ScreenshotData.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    if (screen_shot_id > 0) {
+                        Uri screenShotUri = ContentUris.withAppendedId(ScreenshotData.CONTENT_URI, screen_shot_id);
+                        transaction.commit();
+                        Objects.requireNonNull(getContext()).getContentResolver().notifyChange(screenShotUri, null, false);
+                        return screenShotUri;
+                    }
 
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
+                    throw new SQLException("Failed to insert row into " + uri);
 
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI Insert " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI Insert " + uri);
+            }
         }
     }
 
@@ -163,7 +162,7 @@ public class ScreenShot_Provider extends ContentProvider {
         } catch (IllegalStateException e) {
             if (Aware.DEBUG)
                 Log.e(Aware.TAG, e.getMessage());
-            return null;
+            throw e;
         }
     }
 
@@ -172,47 +171,45 @@ public class ScreenShot_Provider extends ContentProvider {
         initialiseDatabase();
 
         //lock database for transaction
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case SCREENSHOT:
-                count = database.delete(DATABASE_TABLES[0], selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI delete " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case SCREENSHOT:
+                    count = database.delete(DATABASE_TABLES[0], selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI delete " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 
     @Override
     public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case SCREENSHOT:
-                count = database.update(DATABASE_TABLES[0], values, selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI update" + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case SCREENSHOT:
+                    count = database.update(DATABASE_TABLES[0], values, selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI update" + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 }
