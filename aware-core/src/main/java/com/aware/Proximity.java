@@ -7,8 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SyncRequest;
 import android.database.Cursor;
-import android.database.SQLException;
-import android.database.sqlite.SQLiteException;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -24,10 +22,8 @@ import com.aware.providers.Proximity_Provider;
 import com.aware.providers.Proximity_Provider.Proximity_Data;
 import com.aware.providers.Proximity_Provider.Proximity_Sensor;
 import com.aware.utils.Aware_Sensor;
+import com.aware.utils.SensorDataBuffer;
 import com.aware.utils.SensorTimeUnits;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * AWARE Proximity module
@@ -64,7 +60,7 @@ public class Proximity extends Aware_Sensor implements SensorEventListener {
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
-    private List<ContentValues> data_values = new ArrayList<ContentValues>();
+    private SensorDataBuffer dataBuffer;
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -90,34 +86,21 @@ public class Proximity extends Aware_Sensor implements SensorEventListener {
 
         if (awareSensor != null) awareSensor.onProximityChanged(rowData);
 
-        data_values.add(rowData);
+        boolean buffered = dataBuffer.add(rowData);
         LAST_TS = TS;
+        if (!buffered) return;
 
-        if (data_values.size() < 250 && TS < LAST_SAVE + 300000) {
+        if (dataBuffer.size() < SensorDataBuffer.BATCH_SIZE && TS < LAST_SAVE + 300000) {
             return;
         }
 
-        final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-        data_values.toArray(data_buffer);
-        try {
-            if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        getContentResolver().bulkInsert(Proximity_Provider.Proximity_Data.CONTENT_URI, data_buffer);
-
-                        Intent newData = new Intent(ACTION_AWARE_PROXIMITY);
-                        sendBroadcast(newData);
-                    }
-                }).run();
-            }
-        } catch (SQLiteException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-        } catch (SQLException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        if (dataBuffer.flush(isDatabaseWriteSuppressed())) {
+            LAST_SAVE = TS;
         }
-        data_values.clear();
-        LAST_SAVE = TS;
+    }
+
+    private boolean isDatabaseWriteSuppressed() {
+        return Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true");
     }
 
     private static Proximity.AWARESensorObserver awareSensor;
@@ -180,6 +163,7 @@ public class Proximity extends Aware_Sensor implements SensorEventListener {
         AUTHORITY = Proximity_Provider.getAuthority(this);
 
         TAG = "AWARE::Proximity";
+        dataBuffer = new SensorDataBuffer(this, Proximity_Data.CONTENT_URI, ACTION_AWARE_PROXIMITY, TAG);
 
         mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         mProximity = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
@@ -203,6 +187,7 @@ public class Proximity extends Aware_Sensor implements SensorEventListener {
         sensorHandler.removeCallbacksAndMessages(null);
         mSensorManager.unregisterListener(this, mProximity);
         sensorThread.quit();
+        dataBuffer.close(isDatabaseWriteSuppressed());
 
         wakeLock.release();
 

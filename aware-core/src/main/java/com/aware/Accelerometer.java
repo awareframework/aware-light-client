@@ -7,8 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SyncRequest;
 import android.database.Cursor;
-import android.database.SQLException;
-import android.database.sqlite.SQLiteException;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -24,10 +22,8 @@ import com.aware.providers.Accelerometer_Provider;
 import com.aware.providers.Accelerometer_Provider.Accelerometer_Data;
 import com.aware.providers.Accelerometer_Provider.Accelerometer_Sensor;
 import com.aware.utils.Aware_Sensor;
+import com.aware.utils.SensorDataBuffer;
 import com.aware.utils.SensorTimeUnits;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * AWARE Accelerometer module
@@ -57,7 +53,7 @@ public class Accelerometer extends Aware_Sensor implements SensorEventListener {
 
     public static final String ACTION_AWARE_ACCELEROMETER = "ACTION_AWARE_ACCELEROMETER";
 
-    private List<ContentValues> data_values = new ArrayList<>();
+    private SensorDataBuffer dataBuffer;
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -67,28 +63,7 @@ public class Accelerometer extends Aware_Sensor implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (SignificantMotion.isSignificantMotionActive && !SignificantMotion.CURRENT_SIGMOTION_STATE) {
-            if (data_values.size() > 0) {
-                final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-                data_values.toArray(data_buffer);
-                try {
-                    if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                getContentResolver().bulkInsert(Accelerometer_Data.CONTENT_URI, data_buffer);
-
-                                Intent accelData = new Intent(ACTION_AWARE_ACCELEROMETER);
-                                sendBroadcast(accelData);
-                            }
-                        }).run();
-                    }
-                } catch (SQLiteException e) {
-                    if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-                } catch (SQLException e) {
-                    if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-                }
-                data_values.clear();
-            }
+            dataBuffer.flush(isDatabaseWriteSuppressed());
             return;
         }
 
@@ -113,34 +88,21 @@ public class Accelerometer extends Aware_Sensor implements SensorEventListener {
 
         if (awareSensor != null) awareSensor.onAccelerometerChanged(rowData);
 
-        data_values.add(rowData);
+        boolean buffered = dataBuffer.add(rowData);
         LAST_TS = TS;
+        if (!buffered) return;
 
-        if (data_values.size() < 250 && TS < LAST_SAVE + 300000) {
+        if (dataBuffer.size() < SensorDataBuffer.BATCH_SIZE && TS < LAST_SAVE + 300000) {
             return;
         }
 
-        final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-        data_values.toArray(data_buffer);
-        try {
-            if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        getContentResolver().bulkInsert(Accelerometer_Data.CONTENT_URI, data_buffer);
-
-                        Intent accelData = new Intent(ACTION_AWARE_ACCELEROMETER);
-                        sendBroadcast(accelData);
-                    }
-                }).run();
-            }
-        } catch (SQLiteException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-        } catch (SQLException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        if (dataBuffer.flush(isDatabaseWriteSuppressed())) {
+            LAST_SAVE = TS;
         }
-        data_values.clear();
-        LAST_SAVE = TS;
+    }
+
+    private boolean isDatabaseWriteSuppressed() {
+        return Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true");
     }
 
     private static AWARESensorObserver awareSensor;
@@ -201,6 +163,7 @@ public class Accelerometer extends Aware_Sensor implements SensorEventListener {
         super.onCreate();
 
         AUTHORITY = Accelerometer_Provider.getAuthority(this);
+        dataBuffer = new SensorDataBuffer(this, Accelerometer_Data.CONTENT_URI, ACTION_AWARE_ACCELEROMETER, TAG);
 
         mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
@@ -224,6 +187,7 @@ public class Accelerometer extends Aware_Sensor implements SensorEventListener {
         sensorHandler.removeCallbacksAndMessages(null);
         mSensorManager.unregisterListener(this, mAccelerometer);
         sensorThread.quit();
+        dataBuffer.close(isDatabaseWriteSuppressed());
         wakeLock.release();
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Accelerometer_Provider.getAuthority(this), false);

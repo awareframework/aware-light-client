@@ -7,8 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SyncRequest;
 import android.database.Cursor;
-import android.database.SQLException;
-import android.database.sqlite.SQLiteException;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -24,10 +22,8 @@ import com.aware.providers.Linear_Accelerometer_Provider;
 import com.aware.providers.Linear_Accelerometer_Provider.Linear_Accelerometer_Data;
 import com.aware.providers.Linear_Accelerometer_Provider.Linear_Accelerometer_Sensor;
 import com.aware.utils.Aware_Sensor;
+import com.aware.utils.SensorDataBuffer;
 import com.aware.utils.SensorTimeUnits;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * @author df
@@ -65,7 +61,7 @@ public class LinearAccelerometer extends Aware_Sensor implements SensorEventList
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
-    private List<ContentValues> data_values = new ArrayList<ContentValues>();
+    private SensorDataBuffer dataBuffer;
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -75,29 +71,7 @@ public class LinearAccelerometer extends Aware_Sensor implements SensorEventList
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (SignificantMotion.isSignificantMotionActive && !SignificantMotion.CURRENT_SIGMOTION_STATE) {
-            if (data_values.size() > 0) {
-                final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-                data_values.toArray(data_buffer);
-                try {
-                    if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                getContentResolver().bulkInsert(Linear_Accelerometer_Provider.Linear_Accelerometer_Data.CONTENT_URI, data_buffer);
-
-                                Intent newData = new Intent(ACTION_AWARE_LINEAR_ACCELEROMETER);
-                                sendBroadcast(newData);
-                            }
-                        }).run();
-                    }
-                } catch (SQLiteException e) {
-                    if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-                } catch (SQLException e) {
-                    if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-                }
-                data_values.clear();
-            }
-
+            dataBuffer.flush(isDatabaseWriteSuppressed());
             return;
         }
 
@@ -120,37 +94,23 @@ public class LinearAccelerometer extends Aware_Sensor implements SensorEventList
         rowData.put(Linear_Accelerometer_Data.VALUES_2, event.values[2]);
         rowData.put(Linear_Accelerometer_Data.ACCURACY, event.accuracy);
 
-        data_values.add(rowData);
+        boolean buffered = dataBuffer.add(rowData);
         LAST_TS = TS;
 
         if (awareSensor != null) awareSensor.onLinearAccelChanged(rowData);
+        if (!buffered) return;
 
-        if (data_values.size() < 250 && TS < LAST_SAVE + 300000) {
+        if (dataBuffer.size() < SensorDataBuffer.BATCH_SIZE && TS < LAST_SAVE + 300000) {
             return;
         }
 
-        final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-        data_values.toArray(data_buffer);
-
-        try {
-            if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        getContentResolver().bulkInsert(Linear_Accelerometer_Provider.Linear_Accelerometer_Data.CONTENT_URI, data_buffer);
-
-                        Intent newData = new Intent(ACTION_AWARE_LINEAR_ACCELEROMETER);
-                        sendBroadcast(newData);
-                    }
-                }).run();
-            }
-        } catch (SQLiteException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-        } catch (SQLException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        if (dataBuffer.flush(isDatabaseWriteSuppressed())) {
+            LAST_SAVE = TS;
         }
-        data_values.clear();
-        LAST_SAVE = TS;
+    }
+
+    private boolean isDatabaseWriteSuppressed() {
+        return Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true");
     }
 
     private static LinearAccelerometer.AWARESensorObserver awareSensor;
@@ -211,6 +171,7 @@ public class LinearAccelerometer extends Aware_Sensor implements SensorEventList
         super.onCreate();
 
         AUTHORITY = Linear_Accelerometer_Provider.getAuthority(this);
+        dataBuffer = new SensorDataBuffer(this, Linear_Accelerometer_Data.CONTENT_URI, ACTION_AWARE_LINEAR_ACCELEROMETER, TAG);
 
         mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         mLinearAccelerator = mSensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
@@ -234,6 +195,7 @@ public class LinearAccelerometer extends Aware_Sensor implements SensorEventList
         sensorHandler.removeCallbacksAndMessages(null);
         mSensorManager.unregisterListener(this, mLinearAccelerator);
         sensorThread.quit();
+        dataBuffer.close(isDatabaseWriteSuppressed());
 
         wakeLock.release();
 

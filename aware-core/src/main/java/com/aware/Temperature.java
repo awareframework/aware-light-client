@@ -7,8 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SyncRequest;
 import android.database.Cursor;
-import android.database.SQLException;
-import android.database.sqlite.SQLiteException;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -24,10 +22,8 @@ import com.aware.providers.Temperature_Provider;
 import com.aware.providers.Temperature_Provider.Temperature_Data;
 import com.aware.providers.Temperature_Provider.Temperature_Sensor;
 import com.aware.utils.Aware_Sensor;
+import com.aware.utils.SensorDataBuffer;
 import com.aware.utils.SensorTimeUnits;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * AWARE Temperature module
@@ -69,7 +65,7 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
-    private List<ContentValues> data_values = new ArrayList<ContentValues>();
+    private SensorDataBuffer dataBuffer;
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -95,35 +91,21 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
 
         if (awareSensor != null) awareSensor.onTemperatureChanged(rowData);
 
-        data_values.add(rowData);
+        boolean buffered = dataBuffer.add(rowData);
         LAST_TS = TS;
+        if (!buffered) return;
 
-        if (data_values.size() < 250 && TS < LAST_SAVE + 300000) {
+        if (dataBuffer.size() < SensorDataBuffer.BATCH_SIZE && TS < LAST_SAVE + 300000) {
             return;
         }
 
-        final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-        data_values.toArray(data_buffer);
-
-        try {
-            if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        getContentResolver().bulkInsert(Temperature_Provider.Temperature_Data.CONTENT_URI, data_buffer);
-
-                        Intent accelData = new Intent(ACTION_AWARE_TEMPERATURE);
-                        sendBroadcast(accelData);
-                    }
-                }).run();
-            }
-        } catch (SQLiteException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-        } catch (SQLException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        if (dataBuffer.flush(isDatabaseWriteSuppressed())) {
+            LAST_SAVE = TS;
         }
-        data_values.clear();
-        LAST_SAVE = TS;
+    }
+
+    private boolean isDatabaseWriteSuppressed() {
+        return Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true");
     }
 
     private static Temperature.AWARESensorObserver awareSensor;
@@ -184,6 +166,7 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
         super.onCreate();
 
         AUTHORITY = Temperature_Provider.getAuthority(this);
+        dataBuffer = new SensorDataBuffer(this, Temperature_Data.CONTENT_URI, ACTION_AWARE_TEMPERATURE, TAG);
 
         mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
 
@@ -212,6 +195,7 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
         sensorHandler.removeCallbacksAndMessages(null);
         mSensorManager.unregisterListener(this, mTemperature);
         sensorThread.quit();
+        dataBuffer.close(isDatabaseWriteSuppressed());
 
         wakeLock.release();
 
