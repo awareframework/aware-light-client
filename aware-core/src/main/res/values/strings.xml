@@ -31,6 +31,8 @@
     <string name="aware_notif_study_update_sensors">Tap to see which sensors changed.</string>
     <string name="aware_notif_upload_stalled_title">Study data is not being sent</string>
     <string name="aware_notif_upload_stalled">Your data is still being collected and kept safely on this device, but it is not reaching the study server right now. Tap for details. Checking your internet connection may help.</string>
+    <string name="aware_notif_researcher_message_title">Message from your study</string>
+    <string name="aware_notif_researcher_message_body">You have a new message from your study.</string>
     <string name="aware_join_study_link">Join Study by link</string>
     <string name="aware_team">Team</string>
     <string name="aware_qrcode">QRCode</string>

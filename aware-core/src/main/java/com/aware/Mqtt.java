@@ -33,6 +33,7 @@ import org.eclipse.paho.client.mqttv3.MqttSecurityException;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
 import javax.net.SocketFactory;
 
@@ -102,6 +103,8 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
      * MQTT message received ID
      */
     public static final int MQTT_MSG_RECEIVED = 2;
+
+    private static final String NOTICE_TOPIC_SUFFIX = "/notice";
 
     /**
      * Broadcast event when a new MQTT message is received from any of the topics subscribed
@@ -229,6 +232,11 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
             sendBroadcast(queueESM);
         }
 
+        if (topic.equalsIgnoreCase(Aware.getDeviceID(getApplicationContext()) + NOTICE_TOPIC_SUFFIX)
+                || topic.equalsIgnoreCase(study_id + "/" + Aware.getDeviceID(getApplicationContext()) + NOTICE_TOPIC_SUFFIX)) {
+            postResearcherMessage(message.toString());
+        }
+
         if (topic.equalsIgnoreCase(Aware.getDeviceID(getApplicationContext()) + "/configuration") || topic.equalsIgnoreCase(study_id + "/" + Aware.getDeviceID(getApplicationContext()) + "/configuration")) {
             JSONArray configs = new JSONArray(message.toString());
             Aware.tweakSettings(getApplicationContext(), configs);
@@ -243,6 +251,29 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
             }
             Scheduler.setSchedules(getApplicationContext(), schedules);
         }
+    }
+
+    private void postResearcherMessage(String rawMessage) {
+        String title = getString(R.string.aware_notif_researcher_message_title);
+        String body = rawMessage;
+        String messageId = rawMessage;
+        try {
+            JSONObject payload = new JSONObject(rawMessage);
+            title = payload.optString("title", title).trim();
+            body = payload.optString("message", payload.optString("instructions", "")).trim();
+            messageId = payload.optString("id", rawMessage);
+        } catch (JSONException ignored) {
+            // Plain-text notices remain supported for publishers outside the dashboard.
+        }
+        if (title.length() == 0) title = getString(R.string.aware_notif_researcher_message_title);
+        if (body.length() == 0) body = getString(R.string.aware_notif_researcher_message_body);
+
+        Aware.postGeneralNotification(
+                this,
+                "aware_researcher_message_" + Integer.toHexString(messageId.hashCode()),
+                Aware.AWARE_RESEARCHER_MESSAGE_NOTIFICATION_ID,
+                title,
+                body);
     }
 
     @Override

@@ -268,6 +268,9 @@ public class Aware extends Service {
      */
     public static final int AWARE_UPLOAD_HEALTH_NOTIFICATION_ID = 567570;
 
+    /** First id reserved for participant-facing researcher messages received over MQTT. */
+    public static final int AWARE_RESEARCHER_MESSAGE_NOTIFICATION_ID = 567571;
+
     /**
      * Holds a reference to the AWARE account, automatically restore in each plugin.
      */
@@ -470,10 +473,56 @@ public class Aware extends Service {
                 return builder;
             case AWARE_NOTIFICATION_IMPORTANCE_GENERAL:
                 // default sound and vibration with HIGH priority
+                builder.setDefaults(Notification.DEFAULT_ALL);
                 builder.setPriority(NotificationCompat.PRIORITY_HIGH);
                 return builder;
             default:
                 return builder;
+        }
+    }
+
+    /**
+     * Posts a participant-facing notification on the same high-importance channel used for study
+     * updates. Android 8+ gets sound and vibration from the channel; older Android versions get
+     * them from {@link #setNotificationProperties(NotificationCompat.Builder, int)}.
+     */
+    public static void postGeneralNotification(Context context, int notificationId,
+                                               CharSequence title, CharSequence text) {
+        postGeneralNotification(context, null, notificationId, title, text);
+    }
+
+    /** Tagged notifications let an at-least-once transport redeliver without duplicating alerts. */
+    public static void postGeneralNotification(Context context, String notificationTag,
+                                               int notificationId,
+                                               CharSequence title, CharSequence text) {
+        Intent open = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+        PendingIntent clickIntent = null;
+        if (open != null) {
+            open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            clickIntent = PendingIntent.getActivity(
+                    context,
+                    notificationId,
+                    open,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        }
+
+        NotificationCompat.Builder builder =
+                new NotificationCompat.Builder(context, AWARE_NOTIFICATION_CHANNEL_GENERAL)
+                        .setChannelId(AWARE_NOTIFICATION_CHANNEL_GENERAL)
+                        .setSmallIcon(R.drawable.ic_stat_aware_accessibility)
+                        .setAutoCancel(true)
+                        .setOnlyAlertOnce(notificationTag != null)
+                        .setContentTitle(title)
+                        .setContentText(text)
+                        .setStyle(new NotificationCompat.BigTextStyle().bigText(text));
+        if (clickIntent != null) builder.setContentIntent(clickIntent);
+        builder = setNotificationProperties(builder, AWARE_NOTIFICATION_IMPORTANCE_GENERAL);
+
+        NotificationManager notificationManager =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager != null) {
+            if (notificationTag == null) notificationManager.notify(notificationId, builder.build());
+            else notificationManager.notify(notificationTag, notificationId, builder.build());
         }
     }
 
@@ -2859,6 +2908,42 @@ public class Aware extends Service {
     }
 
     public static class Aware_Broadcaster extends BroadcastReceiver {
+        /**
+         * Ask every enabled AWARE sync adapter to upload now.
+         *
+         * Android clamps periodic ContentResolver syncs to a platform-defined
+         * minimum (commonly fifteen minutes), so the study's shorter
+         * frequency is delivered by AWARE's own scheduler.  Discovering the
+         * adapters from ContentResolver keeps this central dispatch complete
+         * when sensors are added and does not depend on each sensor service's
+         * process-local broadcast receiver still being registered.
+         */
+        static void requestEnabledSyncs(Context context) {
+            Account account = Aware.getAWAREAccount(context);
+            Bundle sync = new Bundle();
+            sync.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
+            sync.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
+
+            Set<String> requestedAuthorities = new HashSet<>();
+            for (SyncAdapterType adapter : ContentResolver.getSyncAdapterTypes()) {
+                if (!account.type.equals(adapter.accountType)) continue;
+
+                String authority = adapter.authority;
+                if (authority == null || authority.length() == 0) continue;
+                if (ContentResolver.getIsSyncable(account, authority) <= 0) continue;
+                if (!ContentResolver.getSyncAutomatically(account, authority)) continue;
+
+                if (requestedAuthorities.add(authority)) {
+                    ContentResolver.requestSync(account, authority, sync);
+                }
+            }
+
+            if (Aware.DEBUG) {
+                Log.d(TAG, "Requested immediate sync for " + requestedAuthorities.size()
+                        + " enabled AWARE authorities");
+            }
+        }
+
         @Override
         public void onReceive(Context context, Intent intent) {
 //            String authority = Battery_Provider.getAuthority(context.getApplicationContext());
@@ -2873,12 +2958,7 @@ public class Aware extends Service {
                 Aware.reset(context);
             }
             if (intent.getAction().equals(Aware.ACTION_AWARE_SYNC_DATA)) {
-
-                Bundle sync = new Bundle();
-                sync.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
-                sync.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
-
-                ContentResolver.requestSync(Aware.getAWAREAccount(context), Aware_Provider.getAuthority(context), sync);
+                requestEnabledSyncs(context);
             }
             if (intent.getAction().equals(Aware.ACTION_AWARE_SYNC_CONFIG) && isStudy(context)) {
                 final boolean showToast = intent.getBooleanExtra(Aware.SYNC_CONFIG_EXTRA_TOAST, false);

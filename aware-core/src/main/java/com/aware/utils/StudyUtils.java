@@ -6,8 +6,6 @@ package com.aware.utils;
 
 import android.app.IntentService;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -51,7 +49,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import androidx.core.app.NotificationCompat;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -1421,30 +1418,11 @@ public class StudyUtils extends IntentService {
      */
     static void postStudyNotification(Context context, int notificationId,
                                       int titleRes, int textRes) {
-        Intent open = new Intent()
-                .setComponent(new ComponentName("com.aware.phone", "com.aware.phone.ui.Aware_Client"))
-                .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        // A distinct request code per notification: PendingIntents matching on everything but extras
-        // are deduplicated, so a shared code would give both alerts one tap target.
-        PendingIntent clickIntent = PendingIntent.getActivity(context, notificationId, open,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-        NotificationCompat.Builder builder =
-                new NotificationCompat.Builder(context, Aware.AWARE_NOTIFICATION_CHANNEL_GENERAL)
-                        .setChannelId(Aware.AWARE_NOTIFICATION_CHANNEL_GENERAL)
-                        .setContentIntent(clickIntent)
-                        .setSmallIcon(R.drawable.ic_stat_aware_accessibility)
-                        .setAutoCancel(true)
-                        .setContentTitle(context.getResources().getString(titleRes))
-                        .setContentText(context.getResources().getString(textRes))
-                        .setStyle(new NotificationCompat.BigTextStyle()
-                                .bigText(context.getResources().getString(textRes)));
-        builder = Aware.setNotificationProperties(
-                builder, Aware.AWARE_NOTIFICATION_IMPORTANCE_GENERAL);
-
-        NotificationManager notManager =
-                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (notManager != null) notManager.notify(notificationId, builder.build());
+        Aware.postGeneralNotification(
+                context,
+                notificationId,
+                context.getResources().getString(titleRes),
+                context.getResources().getString(textRes));
     }
 
     /** Removes a study notification whose condition has been resolved inside the app. */
