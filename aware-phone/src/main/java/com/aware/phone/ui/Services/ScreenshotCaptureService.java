@@ -32,14 +32,12 @@ import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
 
 import com.aware.phone.R;
+import com.aware.utils.UtcTime;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
 
 public class ScreenshotCaptureService extends Service {
     private static final String TAG = "ScreenCaptureService";
@@ -62,6 +60,7 @@ public class ScreenshotCaptureService extends Service {
     private boolean isScreenOff = false;
     private long lastCaptureTime = 0;
     private int capture_delay = 3000;
+    private boolean resourcesCleaned = true;
 
     private BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
         @Override
@@ -97,15 +96,24 @@ public class ScreenshotCaptureService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+        if (intent == null) {
+            stopSelf(startId);
+            return START_NOT_STICKY;
+        }
 
         int resultCode = intent.getIntExtra(MEDIA_PROJECTION_RESULT_CODE, Activity.RESULT_CANCELED);
         Intent data = intent.getParcelableExtra(MEDIA_PROJECTION_RESULT_DATA);
-        compressionRate = intent.getIntExtra("COMPRESSION_RATE", 20);
+        compressionRate = Math.max(0, Math.min(100,
+                intent.getIntExtra("COMPRESSION_RATE", 20)));
 
         if (resultCode != Activity.RESULT_CANCELED && data != null) {
-            startForegroundService(resultCode, data);
+            if (mediaProjection == null || virtualDisplay == null) {
+                startForegroundService(resultCode, data);
+            }
         } else {
             Log.e(TAG, "Invalid result code or data");
+            stopSelf(startId);
+            return START_NOT_STICKY;
         }
 
         return START_STICKY;
@@ -147,6 +155,7 @@ public class ScreenshotCaptureService extends Service {
      * @param data The intent data from the media projection request.
      */
     private void startForegroundService(int resultCode, Intent data) {
+        resourcesCleaned = false;
         Intent stopSelf = new Intent(this, ScreenshotCaptureService.class);
         stopSelf.setAction(ACTION_STOP_CAPTURE);
         PendingIntent pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT);
@@ -206,6 +215,7 @@ public class ScreenshotCaptureService extends Service {
      * Runnable task that captures the screen image at regular intervals.
      */
     private final Runnable captureRunnable = new Runnable() {
+        private static final int MAX_RETRY_COUNT = 5;
         private int retryCount = 0;
         @Override
         public void run() {
@@ -224,6 +234,11 @@ public class ScreenshotCaptureService extends Service {
                         Log.e(TAG, "Failed to capture image: image is null");
                         resetImageReader();
                         retryCount++;
+                        if (retryCount > MAX_RETRY_COUNT) {
+                            Log.e(TAG, "Capture retry limit reached; stopping");
+                            stopSelf();
+                            return;
+                        }
                         int retryDelay = Math.min(capture_delay, retryCount * 100); // Backoff strategy: max 5 seconds
                         handler.postDelayed(this, retryDelay); // Retry after a delay
                     }
@@ -279,7 +294,7 @@ public class ScreenshotCaptureService extends Service {
             return;
         }
 
-        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+        String timestamp = UtcTime.fileStamp(System.currentTimeMillis());
         File path = new File(downloadsDirectory, "screenshot_" + timestamp + ".jpg");
         try (FileOutputStream fos = new FileOutputStream(path)) {
             bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, fos); // Use the selected compression rate
@@ -320,20 +335,28 @@ public class ScreenshotCaptureService extends Service {
      * Cleans up resources when the service is stopped or media projection is stopped.
      */
     private void cleanupResources() {
+        if (resourcesCleaned) return;
+        resourcesCleaned = true;
         Log.d(TAG, "Cleaning up resources");
         stopCapturing();
         if (handlerThread != null) {
             handlerThread.quitSafely();
-        }
-        if (imageReader != null) {
-            imageReader.close();
+            handlerThread = null;
         }
         if (virtualDisplay != null) {
             virtualDisplay.release();
+            virtualDisplay = null;
         }
-        if (mediaProjection != null) {
-            mediaProjection.stop();
+        MediaProjection projection = mediaProjection;
+        mediaProjection = null;
+        if (projection != null) {
+            projection.stop();
         }
+        if (imageReader != null) {
+            imageReader.close();
+            imageReader = null;
+        }
+        handler = null;
     }
 
     @Override

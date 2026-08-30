@@ -10,9 +10,10 @@
             android:summary="Detects silent from noisy surroundings."
             android:title="Active"/>
 
-    <EditTextPreference
+    <ListPreference
             android:defaultValue="5"
-            android:inputType="numberDecimal"
+            android:entries="@array/ambient_noise_frequency_readable"
+            android:entryValues="@array/ambient_noise_frequency_values"
             android:key="frequency_plugin_ambient_noise"
             android:persistent="true"
             android:summary="Every 5 minutes"

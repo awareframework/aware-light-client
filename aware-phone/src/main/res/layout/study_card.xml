@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Shared study information card. Reused by:
+      - StudyInfoPref (current study, in study mode)
+      - the "previously joined studies" history list (device mode)
+    Populate the value TextViews; hide any row whose value is empty.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingLeft="16dp"
+    android:paddingRight="16dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
+
+    <TextView
+        android:id="@+id/study_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary" />
+
+    <TextView
+        android:id="@+id/study_description"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textSize="14sp"
+        android:textColor="?android:attr/textColorSecondary" />
+
+    <!-- Contact / PI -->
+    <LinearLayout
+        android:id="@+id/row_contact"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="10dp">
+
+        <TextView
+            android:layout_width="88dp"
+            android:layout_height="wrap_content"
+            android:text="Contact"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <TextView
+            android:id="@+id/study_contact"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorPrimary" />
+    </LinearLayout>
+
+    <!-- Email (tap to copy) -->
+    <LinearLayout
+        android:id="@+id/row_email"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp">
+
+        <TextView
+            android:layout_width="88dp"
+            android:layout_height="wrap_content"
+            android:text="Email"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <TextView
+            android:id="@+id/study_email"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:autoLink="none"
+            android:textColor="?android:attr/textColorLink" />
+    </LinearLayout>
+
+    <!-- Study link / URL -->
+    <LinearLayout
+        android:id="@+id/row_link"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp">
+
+        <TextView
+            android:layout_width="88dp"
+            android:layout_height="wrap_content"
+            android:text="Study link"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <TextView
+            android:id="@+id/study_link"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:autoLink="none"
+            android:textColor="?android:attr/textColorLink" />
+    </LinearLayout>
+
+    <!-- Joined date -->
+    <LinearLayout
+        android:id="@+id/row_joined"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp">
+
+        <TextView
+            android:layout_width="88dp"
+            android:layout_height="wrap_content"
+            android:text="Joined"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <TextView
+            android:id="@+id/study_joined"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorPrimary" />
+    </LinearLayout>
+
+    <!-- Status (enrolled / left) -->
+    <LinearLayout
+        android:id="@+id/row_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp">
+
+        <TextView
+            android:layout_width="88dp"
+            android:layout_height="wrap_content"
+            android:text="Status"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <TextView
+            android:id="@+id/study_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorPrimary" />
+    </LinearLayout>
+
+</LinearLayout>

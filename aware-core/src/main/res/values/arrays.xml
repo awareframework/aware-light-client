@@ -46,4 +46,234 @@
         <item>Fast (20ms)</item>
         <item>Fastest (0ms)</item>
     </string-array>
+
+    <string-array name="motion_frequency_values">
+        <item>20000</item>
+        <item>50000</item>
+        <item>100000</item>
+        <item>1000000</item>
+    </string-array>
+    <string-array name="motion_frequency_readable">
+        <item>Fall / impact detection (50 Hz)</item>
+        <item>Activity / transport-mode classification (20 Hz)</item>
+        <item>Coarse mobility type (10 Hz)</item>
+        <item>Long-term, battery-conservative (1 Hz)</item>
+    </string-array>
+
+    <string-array name="magnetometer_frequency_values">
+        <item>50000</item>
+        <item>200000</item>
+        <item>1000000</item>
+    </string-array>
+    <string-array name="magnetometer_frequency_readable">
+        <item>Indoor positioning / heading fusion (20 Hz)</item>
+        <item>Orientation / compass context (5 Hz)</item>
+        <item>Minimal footprint (1 Hz)</item>
+    </string-array>
+
+    <string-array name="light_frequency_values">
+        <item>200000</item>
+        <item>1000000</item>
+        <item>30000000</item>
+    </string-array>
+    <string-array name="light_frequency_readable">
+        <item>Fine environmental transitions (5 Hz)</item>
+        <item>Circadian / screen-exposure proxy (1 Hz)</item>
+        <item>Long-term passive monitoring (every 30s)</item>
+    </string-array>
+
+    <string-array name="barometer_frequency_values">
+        <item>200000</item>
+        <item>1000000</item>
+        <item>30000000</item>
+    </string-array>
+    <string-array name="barometer_frequency_readable">
+        <item>Real-time floor / vertical-transition detection (5 Hz)</item>
+        <item>Coarse elevation / weather context (1 Hz)</item>
+        <item>Minimal footprint (every 30s)</item>
+    </string-array>
+
+    <string-array name="proximity_frequency_values">
+        <item>200000</item>
+        <item>1000000</item>
+    </string-array>
+    <string-array name="proximity_frequency_readable">
+        <item>Real-time call / pocket-state detection (5 Hz)</item>
+        <item>Standard context logging (1 Hz)</item>
+    </string-array>
+
+    <string-array name="temperature_frequency_values">
+        <item>10000000</item>
+        <item>60000000</item>
+    </string-array>
+    <string-array name="temperature_frequency_readable">
+        <item>Standard environmental logging (every 10s)</item>
+        <item>Minimal footprint (every 60s)</item>
+    </string-array>
+
+    <string-array name="location_frequency_values">
+        <item>30</item>
+        <item>180</item>
+        <item>600</item>
+    </string-array>
+    <string-array name="location_frequency_readable">
+        <item>Trip / transportation-mode capture (30s)</item>
+        <item>Standard mobility-pattern capture (3 min)</item>
+        <item>Battery-conservative (10 min)</item>
+    </string-array>
+
+    <string-array name="scan_frequency_values">
+        <item>15</item>
+        <item>60</item>
+        <item>300</item>
+    </string-array>
+    <string-array name="scan_frequency_readable">
+        <item>Real-time co-location / indoor positioning (15s)</item>
+        <item>Standard social-proximity detection (60s)</item>
+        <item>Battery-conservative (5 min)</item>
+    </string-array>
+
+    <string-array name="processor_frequency_values">
+        <item>1</item>
+        <item>10</item>
+        <item>60</item>
+    </string-array>
+    <string-array name="processor_frequency_readable">
+        <item>Diagnostic / real-time load monitoring (1s)</item>
+        <item>Standard housekeeping (10s)</item>
+        <item>Minimal footprint (60s)</item>
+    </string-array>
+
+    <!-- Sensitivity thresholds. A threshold is a change filter: a reading is stored only when it
+         differs from the last STORED reading by at least this much, in the sensor's native unit,
+         and on the three-axis sensors only when every axis is within it. 0 stores everything.
+         The noise-gate tiers sit just above published smartphone sensor noise, so they drop rows
+         where nothing but the sensor itself changed. Units and usable limits are in
+         com.aware.utils.SensorThresholds; these values match the study Configurator's presets. -->
+
+    <!-- Accelerometer and linear accelerometer: they differ by the gravity component, which is
+         constant while the device is still, so the change between readings means the same on both.
+         Noise floor measured across five smartphones is 0.0042-0.0106 m/s² per axis. -->
+    <string-array name="motion_threshold_values">
+        <item>0</item>
+        <item>0.05</item>
+        <item>0.3</item>
+        <item>1.0</item>
+    </string-array>
+    <string-array name="motion_threshold_readable">
+        <item>Record every sample (no filtering)</item>
+        <item>Drop sensor noise only (0.05 m/s²)</item>
+        <item>Movement vs. stillness (0.3 m/s²)</item>
+        <item>Pronounced motion only (1.0 m/s²)</item>
+    </string-array>
+
+    <!-- Gravity is an orientation signal, so its tiers are tilt angles: 0.05 ≈ 0.3°, 0.2 ≈ 1°,
+         1.0 ≈ 6° from horizontal. -->
+    <string-array name="gravity_threshold_values">
+        <item>0</item>
+        <item>0.05</item>
+        <item>0.2</item>
+        <item>1.0</item>
+    </string-array>
+    <string-array name="gravity_threshold_readable">
+        <item>Record every sample (no filtering)</item>
+        <item>Drop sensor noise only (0.05 m/s²)</item>
+        <item>Tilt changes (0.2 m/s², about 1°)</item>
+        <item>Large reorientation only (1.0 m/s², about 6°)</item>
+    </string-array>
+
+    <!-- Worst three-axis gyroscope noise measured on smartphones is 0.0027 rad/s. -->
+    <string-array name="gyroscope_threshold_values">
+        <item>0</item>
+        <item>0.01</item>
+        <item>0.05</item>
+        <item>0.2</item>
+    </string-array>
+    <string-array name="gyroscope_threshold_readable">
+        <item>Record every sample (no filtering)</item>
+        <item>Drop sensor noise only (0.01 rad/s)</item>
+        <item>Deliberate rotation (0.05 rad/s, about 3°/s)</item>
+        <item>Brisk rotation only (0.2 rad/s, about 11°/s)</item>
+    </string-array>
+
+    <!-- Rotation vector components are unitless quaternion parts in -1…1; a component moves by
+         about half the rotation angle, so 0.02 ≈ 2°. -->
+    <string-array name="rotation_threshold_values">
+        <item>0</item>
+        <item>0.005</item>
+        <item>0.02</item>
+        <item>0.1</item>
+    </string-array>
+    <string-array name="rotation_threshold_readable">
+        <item>Record every sample (no filtering)</item>
+        <item>Drop sensor noise only (0.005, about 0.6°)</item>
+        <item>Orientation changes (0.02, about 2°)</item>
+        <item>Coarse orientation states only (0.1, about 11°)</item>
+    </string-array>
+
+    <!-- A typical smartphone magnetometer quantises at about 1 µT, roughly 2% of Earth's
+         23-65 µT field. -->
+    <string-array name="magnetometer_threshold_values">
+        <item>0</item>
+        <item>1</item>
+        <item>3</item>
+        <item>10</item>
+    </string-array>
+    <string-array name="magnetometer_threshold_readable">
+        <item>Record every sample (no filtering)</item>
+        <item>Drop sensor noise only (1 µT)</item>
+        <item>Heading and environment changes (3 µT)</item>
+        <item>Strong disturbances only (10 µT)</item>
+    </string-array>
+
+    <!-- Sensor resolution is about 0.01 hPa; adjacent floors differ by about 0.43 hPa, and two
+         seconds of stair walking produces 0.06-0.18 hPa, so 0.05 keeps stairs and lifts. -->
+    <string-array name="barometer_threshold_values">
+        <item>0</item>
+        <item>0.02</item>
+        <item>0.05</item>
+        <item>0.4</item>
+    </string-array>
+    <string-array name="barometer_threshold_readable">
+        <item>Record every sample (no filtering)</item>
+        <item>Drop sensor noise only (0.02 hPa)</item>
+        <item>Vertical movement (0.05 hPa, about 0.4 m)</item>
+        <item>Floor transitions only (0.4 hPa, about one floor)</item>
+    </string-array>
+
+    <!-- Illuminance spans five orders of magnitude and a noticeable change scales with brightness,
+         so no fixed lux step suits both a dim room and daylight. Circadian and sleep work needs
+         the evening range around 10 lux, which any larger threshold erases. -->
+    <string-array name="light_threshold_values">
+        <item>0</item>
+        <item>1</item>
+        <item>10</item>
+        <item>50</item>
+    </string-array>
+    <string-array name="light_threshold_readable">
+        <item>Record every sample (best for circadian / sleep)</item>
+        <item>Drop sensor noise only (1 lux)</item>
+        <item>Indoor lighting changes (10 lux)</item>
+        <item>Room and indoor/outdoor transitions only (50 lux)</item>
+    </string-array>
+
+    <string-array name="temperature_threshold_values">
+        <item>0</item>
+        <item>0.1</item>
+        <item>0.5</item>
+    </string-array>
+    <string-array name="temperature_threshold_readable">
+        <item>Record every sample (no filtering)</item>
+        <item>Drop sensor noise only (0.1 °C)</item>
+        <item>Environmental changes (0.5 °C)</item>
+    </string-array>
+
+    <!-- Proximity reports two states on most hardware, near ≈0 cm and far ≈5 cm, and only on
+         change. There is nothing in between for a threshold to remove. -->
+    <string-array name="proximity_threshold_values">
+        <item>0</item>
+    </string-array>
+    <string-array name="proximity_threshold_readable">
+        <item>Record every near/far change (recommended)</item>
+    </string-array>
 </resources>

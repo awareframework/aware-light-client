@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One sensor row in the consent screen: label + reason on the left, Enable / "Granted ✓" on the right. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingRight="12dp">
+
+        <TextView
+            android:id="@+id/sensor_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/sensor_reason"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorSecondary" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btn_enable"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Enable" />
+
+    <TextView
+        android:id="@+id/txt_granted"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Granted ✓"
+        android:textColor="#2E7D32"
+        android:textStyle="bold"
+        android:visibility="gone" />
+</LinearLayout>

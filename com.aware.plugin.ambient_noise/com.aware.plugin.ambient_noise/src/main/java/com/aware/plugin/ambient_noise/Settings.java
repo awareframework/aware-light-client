@@ -5,6 +5,7 @@ import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.os.Bundle;
 import android.preference.CheckBoxPreference;
 import android.preference.EditTextPreference;
+import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceManager;
 import android.util.Log;
@@ -39,17 +40,15 @@ public class Settings extends AppCompatPreferenceActivity implements OnSharedPre
      */
     public static final String ENABLE_CONFIG_UPDATE = "enable_config_update";
 
-    private static CheckBoxPreference active;
-    private static EditTextPreference frequency, listen, silence;
+    private CheckBoxPreference active;
+    private ListPreference frequency;
+    private EditTextPreference listen, silence;
     private static final String TAG = "ambient_noise";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         addPreferencesFromResource(R.xml.preferences_ambient_noise);
-
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        prefs.registerOnSharedPreferenceChangeListener(this);
 
         if (Aware.getSetting(getApplicationContext(), ENABLE_CONFIG_UPDATE).length() == 0) {
             Aware.setSetting(getApplicationContext(), ENABLE_CONFIG_UPDATE, true);
@@ -94,12 +93,12 @@ public class Settings extends AppCompatPreferenceActivity implements OnSharedPre
         active.setChecked(isActive);
 
         // Frequency
-        frequency = (EditTextPreference) findPreference(FREQUENCY_PLUGIN_AMBIENT_NOISE);
+        frequency = (ListPreference) findPreference(FREQUENCY_PLUGIN_AMBIENT_NOISE);
         String freqValue = Aware.getSetting(getApplicationContext(), FREQUENCY_PLUGIN_AMBIENT_NOISE);
         PreferenceManager.getDefaultSharedPreferences(this).edit()
                 .putString(FREQUENCY_PLUGIN_AMBIENT_NOISE, freqValue)
                 .apply();
-        frequency.setText(freqValue);
+        frequency.setValue(freqValue);
         frequency.setSummary("Every " + freqValue + " minutes");
 
         // Listen duration

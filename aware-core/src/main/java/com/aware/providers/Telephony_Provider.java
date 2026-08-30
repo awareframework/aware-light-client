@@ -16,6 +16,7 @@ import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -236,36 +237,35 @@ public class Telephony_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case TELEPHONY:
-                count = database.delete(DATABASE_TABLES[0], selection,
-                        selectionArgs);
-                break;
-            case GSM:
-                count = database.delete(DATABASE_TABLES[1], selection,
-                        selectionArgs);
-                break;
-            case NEIGHBOR:
-                count = database.delete(DATABASE_TABLES[2], selection,
-                        selectionArgs);
-                break;
-            case CDMA:
-                count = database.delete(DATABASE_TABLES[3], selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case TELEPHONY:
+                    count = database.delete(DATABASE_TABLES[0], selection,
+                            selectionArgs);
+                    break;
+                case GSM:
+                    count = database.delete(DATABASE_TABLES[1], selection,
+                            selectionArgs);
+                    break;
+                case NEIGHBOR:
+                    count = database.delete(DATABASE_TABLES[2], selection,
+                            selectionArgs);
+                    break;
+                case CDMA:
+                    count = database.delete(DATABASE_TABLES[3], selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 
     @Override
@@ -302,64 +302,56 @@ public class Telephony_Provider extends ContentProvider {
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        switch (sUriMatcher.match(uri)) {
-            case TELEPHONY:
-                long tele_id = database.insertWithOnConflict(DATABASE_TABLES[0],
-                        Telephony_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (tele_id > 0) {
-                    Uri tele_uri = ContentUris.withAppendedId(
-                            Telephony_Data.CONTENT_URI, tele_id);
-                    getContext().getContentResolver().notifyChange(tele_uri, null, false);
-                    return tele_uri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case GSM:
-                long gsm_id = database.insertWithOnConflict(DATABASE_TABLES[1],
-                        GSM_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (gsm_id > 0) {
-                    Uri gsm_uri = ContentUris.withAppendedId(GSM_Data.CONTENT_URI,
-                            gsm_id);
-                    getContext().getContentResolver().notifyChange(gsm_uri, null, false);
-                    return gsm_uri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case NEIGHBOR:
-                long neighbor_id = database.insertWithOnConflict(DATABASE_TABLES[2],
-                        GSM_Neighbors_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (neighbor_id > 0) {
-                    Uri neighbor_uri = ContentUris.withAppendedId(
-                            GSM_Neighbors_Data.CONTENT_URI, neighbor_id);
-                    getContext().getContentResolver().notifyChange(neighbor_uri,null, false);
-                    return neighbor_uri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case CDMA:
-                long cdma_id = database.insertWithOnConflict(DATABASE_TABLES[3],
-                        CDMA_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (cdma_id > 0) {
-                    Uri cdma_uri = ContentUris.withAppendedId(
-                            CDMA_Data.CONTENT_URI, cdma_id);
-                    getContext().getContentResolver().notifyChange(cdma_uri, null, false);
-                    return cdma_uri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            switch (sUriMatcher.match(uri)) {
+                case TELEPHONY:
+                    long tele_id = database.insertWithOnConflict(DATABASE_TABLES[0],
+                            Telephony_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (tele_id > 0) {
+                        Uri tele_uri = ContentUris.withAppendedId(
+                                Telephony_Data.CONTENT_URI, tele_id);
+                        getContext().getContentResolver().notifyChange(tele_uri, null, false);
+                        return tele_uri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case GSM:
+                    long gsm_id = database.insertWithOnConflict(DATABASE_TABLES[1],
+                            GSM_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (gsm_id > 0) {
+                        Uri gsm_uri = ContentUris.withAppendedId(GSM_Data.CONTENT_URI,
+                                gsm_id);
+                        getContext().getContentResolver().notifyChange(gsm_uri, null, false);
+                        return gsm_uri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case NEIGHBOR:
+                    long neighbor_id = database.insertWithOnConflict(DATABASE_TABLES[2],
+                            GSM_Neighbors_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (neighbor_id > 0) {
+                        Uri neighbor_uri = ContentUris.withAppendedId(
+                                GSM_Neighbors_Data.CONTENT_URI, neighbor_id);
+                        getContext().getContentResolver().notifyChange(neighbor_uri,null, false);
+                        return neighbor_uri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case CDMA:
+                    long cdma_id = database.insertWithOnConflict(DATABASE_TABLES[3],
+                            CDMA_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (cdma_id > 0) {
+                        Uri cdma_uri = ContentUris.withAppendedId(
+                                CDMA_Data.CONTENT_URI, cdma_id);
+                        getContext().getContentResolver().notifyChange(cdma_uri, null, false);
+                        return cdma_uri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
         }
     }
 
@@ -510,7 +502,7 @@ public class Telephony_Provider extends ContentProvider {
             if (Aware.DEBUG)
                 Log.e(Aware.TAG, e.getMessage());
 
-            return null;
+            throw e;
         }
     }
 
@@ -523,35 +515,34 @@ public class Telephony_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case TELEPHONY:
-                count = database.update(DATABASE_TABLES[0], values, selection,
-                        selectionArgs);
-                break;
-            case GSM:
-                count = database.update(DATABASE_TABLES[1], values, selection,
-                        selectionArgs);
-                break;
-            case NEIGHBOR:
-                count = database.update(DATABASE_TABLES[2], values, selection,
-                        selectionArgs);
-                break;
-            case CDMA:
-                count = database.update(DATABASE_TABLES[3], values, selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case TELEPHONY:
+                    count = database.update(DATABASE_TABLES[0], values, selection,
+                            selectionArgs);
+                    break;
+                case GSM:
+                    count = database.update(DATABASE_TABLES[1], values, selection,
+                            selectionArgs);
+                    break;
+                case NEIGHBOR:
+                    count = database.update(DATABASE_TABLES[2], values, selection,
+                            selectionArgs);
+                    break;
+                case CDMA:
+                    count = database.update(DATABASE_TABLES[3], values, selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 }

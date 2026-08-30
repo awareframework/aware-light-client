@@ -1,60 +1,119 @@
 Change log for AWARE
-4.7.3.beta
-- add column for record bluetooth connection status
+
+4.8.2.beta
+- New: a study can now upload through its own webservice instead of the phone connecting to the research database. On this path the phone is given a study URL and nothing else, holds no database credential at all, and the study configuration ships no database block. Which path a study uses is the study's choice; a study whose configuration predates this keeps uploading as before
+- A study on the webservice path is now checked for reachability while joining, so a study URL that does not answer is reported at the QR code instead of leaving a phone that collects and never delivers
+- New: a study can be joined by scanning its QR code from the join dialog, beside pasting the link. Both routes fetch the configuration, check it against the dataflow the study declares, and reach the same consent screen, so a study that joins by link joins by scan
+- The camera is now asked for at the moment the participant chooses to scan, rather than at install; a participant who pastes the link is never asked for it at all
+- The study link field now says what to paste and offers a link keyboard
+- Fixed a password-protected study asking for its password a second time when the join screen came back after a plugin install, even though the correct password had already been given
+- Fixed the join screen carrying a previous study's link and password into a study opened later in the same session
+- Uploads now resume from the last row the research database acknowledged, tracked per table by insertion order rather than by capture time, so a batch offers only rows that have never been sent and a row stored late is not paged over
+- Fixed screen sessions and questionnaire answers that finish long after they were started never being uploaded: a table whose rows finish after they are stored is now paged by the instant they finished, so a row that finishes now is sent on the next sync however long it ran
+- Data is now uploaded on the frequency the study configures. The upload previously ran when Android chose to batch it into a maintenance window, which a study's cadence had no say in
+- Fixed the record of which sensors are failing to deliver being corrupted when several uploads finished at the same moment, which could leave a warning showing after delivery had recovered, or hide one while a table was still failing
+- An install that has no device id yet no longer attempts to sync: there is no identity to attribute a row to, and refusing here is clearer than a payload the server cannot place
+- Fixed one participant being split across two device ids: the id is now kept in a second place and restored when the settings row is lost, instead of a lost row being read as a first run and a new id minted. Data already uploaded under the earlier id could not be tied to the new one
+- Every uploaded row now carries the resolved device id, plugin rows included, which could previously be stamped with an empty one
+- Privacy: reinstalling the app no longer restores the previous installation's id, study credentials, settings or sensor database from an Android backup. A reinstall is a new identity
+- The device name the participant sets is now kept in the device profile the study receives, and changing it sends a new profile row rather than being lost at the next upload
+- New: a researcher can send a message to a participant, delivered over the study's MQTT channel and shown as a notification with sound. Tapping it opens the message itself rather than the app's main screen
+- New: a questionnaire the participant has not answered is put back on screen when they open the app. Until now the notification was the only way back to one, so a swipe or a cleared shade lost it for good. A question whose time has expired is left alone
+- Dates and times recorded as text (screenshot filenames, and answers to date and date-and-time questions) are now recorded in UTC, so a researcher reads one timezone across the whole dataset. Every other timestamp was already UTC-anchored
+- Physical sensors (accelerometer, barometer, gravity, gyroscope, light, linear accelerometer, magnetometer, proximity, rotation, temperature) now write through one ordered background worker with a bounded buffer that retries a failed write, instead of starting a thread for every batch. A write that fails is retried before later samples rather than dropping the batch
+- Removed the per-reading label column from those ten sensors, which was written empty on every row and never set. Existing tables are updated in place, without copying the data
+- Every database provider now releases its transaction on every exit path, so a failed write can no longer leave the database locked for the rest of the session
+
+4.8.1.beta
+- Sensor and plugin consent is now shown before joining a study instead of after, and covers the plugins a study needs as well as its sensors, grouped into labelled sections
+- Leaving a study now always completes on the device, even when the research database cannot be reached; telling the researcher is best-effort, and the exit record states when it could not be delivered
+- New: when a researcher changes a study's database password, the app tells a rejected password apart from a database that is simply down, asks the participant to re-enter it, and pauses uploads until it is accepted
+- Fixed joining a study from a link or QR code, which crashed before any validation had run
+- A study that needs a participant-entered password can now be joined from a link or QR code; the app asks for the password instead of failing with nothing the participant can do
+- Join failures now say what is actually wrong: an invalid configuration, a missing password, a wrong password, or a database that cannot be reached. An unreachable database is no longer reported as a wrong password
+- Study addresses are checked before anything is downloaded, so a missing or malformed address gives a message instead of failing silently
+- When several study config checks are triggered at once, the app now runs one check instead of queuing every request
+- The app now stops waiting for a study configuration that does not answer in time, and refuses a configuration file larger than 5 MB
+- Sensors whose hardware the device does not have are now also ignored when a config update is applied, not only on first sync
+- Fixed a background timer that kept a processor core busy for hours for every pending ESM questionnaire
+- Fixed a pending ESM questionnaire preventing a study join from ever starting
+- The background collection notice is now always visible and silent, says that study data is being collected, and opens the app when tapped; added the notification permission that Android 13 and later require
+- Fixed screenshot capture restarting in a loop and creating a new capture session on every background service start
+- Fixed MQTT failing to start on an empty or malformed port, keep-alive, or quality-of-service setting
+- Fixed a worker thread being leaked on every restart of the background service
+- Fixed a scheduled action failing the whole scheduler when it pointed at something no longer installed or carried an unreadable value
+- Further Ambient Noise collection stability fixes
+- Fixed repeated permission requests looping in the background after a permission was denied
+- Security: database passwords are no longer written to the device log, including the database connection log
+- Security: password, secret, and token values are masked in logged study configuration and study data
+- Security: uploads are always encrypted, and a study that publishes its database's certificate authority in its configuration also gets the server's identity verified, so data reaches that study's server and no other host. A study that publishes no authority still gets an encrypted connection, but the server it connects to is not verified
+- Upload progress is tracked in its own table, so each table is uploaded once instead of being re-sent from the beginning whenever the log was cleared
+- Device information is now one row per device, rewritten when the device's hardware or Android version actually changes, and the server records a row per change
+- Device information drops four fields that carried no information: the serial (which Android stops reporting), the build type, the device label, and the brand (the manufacturer says the same thing)
+- Log entries now carry the kind of entry they are, so restarts, schedules, uploads, study changes and sensor diagnostics can be counted separately
+- Study rows now record when the configuration was last updated, name the join and re-join events explicitly, and carry the configuration only on the rows where it changed
+- Device information is no longer sent to awareframework.com when a device is first recorded
+- Fixed the on-device database never upgrading: a schema change was aborted part-way and silently rolled back, so several releases' worth of database changes had never reached a phone that already had AWARE installed. Upgrades now complete, keeping existing data, and a failed upgrade is recorded instead of being discarded
+- A study configuration is now applied even while the research database is unreachable. Only the upload waits for the database to come back; the participant is no longer told every minute that their study configuration is broken when nothing is wrong with it
+- A wrong database password and an unreachable database now give different messages when the study configuration is checked
+- Fixed a crash when the screen was rotated while a study was being joined
+- New: the participant is told when the study needs something from them — a study password, or consent for sensors a researcher has newly added — as a notification, so a paused study is noticed without opening the app. Notifications appear only for changes that need a decision: a frequency-only change is applied quietly
+- New: the main screen shows how far collected data has reached the research database, and each sensor shows the same alongside when it last recorded
+- New: the participant is told when data stops reaching the research database, and told once rather than repeatedly. Data continues to be collected and kept on the device until it can be sent. Researchers see when delivery started failing, why, and when it recovered
+- Fixed sensors reporting that they had never collected anything once their data had been uploaded and cleared from the device; the status and the researcher diagnostics now count delivered data as data the sensor collected
+- Fixed the magnetometer comparing one axis against the wrong two when deciding whether a reading changed enough to record, which made any magnetometer threshold keep and drop readings unpredictably
+- Sensor sensitivity settings (accelerometer, barometer, gravity, gyroscope, light, linear accelerometer, magnetometer, proximity, rotation, temperature) changed from raw numeric entry to descriptive presets stated in each sensor's own unit, with recommended values per sensor. A sensitivity larger than the sensor's readings ever change by is refused, and one already set that way now says the sensor is recording nothing instead of showing the number alone
+- Fixed a single sensor's delivery failure being hidden by the other sensors still delivering: whether data is reaching the research database is now tracked per sensor rather than as one flag for the whole upload. The main screen names the sensors that are not delivering, and a sensor that recovers no longer clears a warning that belongs to a different one. Researchers see each affected sensor's failure and its recovery separately
+- Fixed location collection stopping permanently the first time a study configuration was applied, and never resuming for as long as the app kept running, while the location sensor still reported itself as active. GPS, network and passive location are now re-registered when the sensor restarts
+- Fixed an upload waiting indefinitely when the research database accepts the connection and then stops answering. The wait is now bounded, so the stall is reported to the participant and the researcher instead of passing unnoticed for hours, and one stalled table no longer holds back every other table's upload. Collection is unaffected either way and data is kept on the device until it can be sent
+
+4.8.0.beta
+- Sensor sampling-rate settings (accelerometer, barometer, gravity, gyroscope, light, magnetometer, proximity, rotation, temperature, location, Wi-Fi/Bluetooth scanning, processor, Ambient Noise, OpenWeather) changed from raw numeric entry to descriptive dropdown presets, with more sensible default frequencies per sensor
+- New sensor diagnostic logging: when a sensor isn't collecting data, the reason (missing hardware, permission, or accessibility) is now recorded so researchers can see it in the synced data
+- Sensors without supported hardware are now excluded from study config sync instead of silently failing to apply
+- Fixed study config sync not always saving and applying updated settings correctly
+- Added missing consent requests for some sensors; consent checks are now consistent across all sensors
+- New per-sensor consent screen shown after joining a study
+- Fixed crash loops in the Ambient Noise and OpenWeather plugins
+- Wi-Fi scanning now correctly enforces the device's Location services toggle
+- Redesigned study info/history view with a shared study card; improved join/quit/rejoin tracking and sync
+- Fixed a crash when enabling or updating the accessibility service
+- Security: stopped exposing the API key in the UI and source
 
 4.7.2.beta
 - Fix ESM settings parsing crashes and improve error handling
 
 4.7.1.beta
 - New feature: Allow participants to add notes and save them to the remote database
-
-4.6.2.beta
 - Adjust function to count installation, change the official website url used for receive device info
-
-4.6.1.beta
 - New feature to new plugin: Ambient Noise and OpenWeather
 - Rename "AWARE-Light" to "AWARE"
-
-Change log for AWARE-Light
-4.6.1.beta
 - New feature: Allow users to take notes if config file container correspond setting.
-
-4.5.5.beta
 - Add function to count installation and send info to official website
-
-4.5.4.beta
 - Fix logic of reschedule next day random esm trigger, avoid repeat appear of esm notification
-
-4.5.3.beta
 - Fix the ESM queue logic to ensure that the correct number of questions are displayed according to the configurator settings.
-
-4.5.2.beta
 - Screenshot sensor can capture application name for foreground app.
-
-4.5.1.beta
 - New feature: Allow users to filter and save screenshots based on specific package names. Support for inclusive or exclusive.
-
-4.4.1.beta
 - New feature to synchronize the screenshot image data to the remote database specified by the aware-light configurator through base64 encoding.
-
-4.3.1.beta
 - New feature to capture screenshots at regular intervals and save them to the device's storage.
-
-4.2.2.beta
 - Fix display issues: long question titles can be displayed completely.
-
-4.2.1.beta
 - New feature to export the aware-light database files to the device's storage.
 
-4.1.6.beta
-- Fixed a crash that occurred when enabling accessibility before starting a study.
+Change log for AWARE-Light
+4.1.6.light.bundle
+- A crash that occurred when enabling accessibility before starting a study has been fixed.
 - The screen text sensor now correctly collects duplicate text when the foreground app changes, ensuring that screen text is captured during app switches, home screen access, and notification checks.
+- Fix display issues: long question titles can be displayed completely.
+- Fix the ESM queue logic to ensure that the correct number of questions are displayed according to the configurator settings.
+- Fix logic of reschedule next day random esm trigger, avoid repeat appear of esm notification.
+- A stronger password detection added in ScreenText Sensor
 
-4.1.5.beta
+4.1.5.light.bundle
 - Logging if the application is terminated by user actions or system actions to aware_log table
-
-4.1.4.beta
 - Screen reader function improved performance
+
+4.1.4.light.bundle
+- same as 4.1.3.light.bundle
 
 4.1.3.light.bundle
 - Fixed bug for random EMA triggered condition

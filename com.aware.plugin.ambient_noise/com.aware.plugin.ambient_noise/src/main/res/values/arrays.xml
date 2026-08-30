@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="ambient_noise_frequency_values">
+        <item>2</item>
+        <item>5</item>
+        <item>15</item>
+    </string-array>
+    <string-array name="ambient_noise_frequency_readable">
+        <item>Frequent conversation-sensing (every 2 min)</item>
+        <item>Standard (every 5 min)</item>
+        <item>Battery-conservative (every 15 min)</item>
+    </string-array>
+</resources>

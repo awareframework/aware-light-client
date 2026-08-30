@@ -85,18 +85,19 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
             listSensorType.put(sensors.get(i).getType(), true);
         }
 
-        REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_WIFI_STATE);
-//        REQUIRED_PERMISSIONS.add(Manifest.permission.CAMERA);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.BLUETOOTH);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.BLUETOOTH_ADMIN);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.READ_PHONE_STATE);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.GET_ACCOUNTS);
+        // Core sync framework (account creation + SyncAdapters). GET_ACCOUNTS is only
+        // needed below API 26 -- see the matching comment in ui/Aware_Client.java.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O)
+            REQUIRED_PERMISSIONS.add(Manifest.permission.GET_ACCOUNTS);
         REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_SYNC_SETTINGS);
         REQUIRED_PERMISSIONS.add(Manifest.permission.READ_SYNC_SETTINGS);
         REQUIRED_PERMISSIONS.add(Manifest.permission.READ_SYNC_STATS);
+
+        // Core storage (local database, data export, certificates)
+        REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        REQUIRED_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+
+        // Background survival, can ask enabling additional Accesibility settings
         REQUIRED_PERMISSIONS.add(Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
 
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) REQUIRED_PERMISSIONS.add(Manifest.permission.FOREGROUND_SERVICE);
@@ -104,7 +105,7 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
         boolean PERMISSIONS_OK = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             for (String p : REQUIRED_PERMISSIONS) {
-                if (PermissionChecker.checkSelfPermission(this, p) != PermissionChecker.PERMISSION_GRANTED) {
+                if (PermissionChecker.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
                     PERMISSIONS_OK = false;
                     break;
                 }
@@ -187,6 +188,10 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
     }
 
     private class SettingsSync extends AsyncTask<Preference, Preference, Void> {
+        // A category can contain several status_* preferences. Recalculate its icon only once per
+        // sync pass instead of rebinding the same parent row for every child.
+        private final Set<String> refreshedSensorParents = new HashSet<>();
+
         @Override
         protected Void doInBackground(Preference... params) {
             for (Preference pref : params) {
@@ -242,6 +247,7 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
 
             if (PreferenceScreen.class.isInstance(getPreferenceParent(pref))) {
                 PreferenceScreen parent = (PreferenceScreen) getPreferenceParent(pref);
+                if (!refreshedSensorParents.add(parent.getKey())) return;
                 ListAdapter children = parent.getRootAdapter();
                 boolean is_active = false;
                 for (int i = 0; i < children.getCount(); i++) {
@@ -265,7 +271,6 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
                         if (category_icon != null) {
                             category_icon.setColorFilter(new PorterDuffColorFilter(ContextCompat.getColor(getApplicationContext(), R.color.accent), PorterDuff.Mode.SRC_IN));
                             parent.setIcon(category_icon);
-                            onContentChanged();
                         }
                     } catch (NoSuchFieldException | IllegalAccessException e) {
                     }
@@ -278,7 +283,6 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
                         if (category_icon != null) {
                             category_icon.clearColorFilter();
                             parent.setIcon(category_icon);
-                            onContentChanged();
                         }
                     } catch (NoSuchFieldException | IllegalAccessException e) {
                     }
@@ -295,7 +299,7 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
         permissions_ok = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             for (String p : REQUIRED_PERMISSIONS) {
-                if (PermissionChecker.checkSelfPermission(this, p) != PermissionChecker.PERMISSION_GRANTED) {
+                if (PermissionChecker.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
                     permissions_ok = false;
                     break;
                 }
@@ -313,7 +317,7 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
 
         } else {
 
-            if (prefs.getAll().isEmpty() && Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID).length() == 0) {
+            if (prefs.getAll().isEmpty() && Aware.getDeviceID(getApplicationContext()).length() == 0) {
                 PreferenceManager.setDefaultValues(getApplicationContext(), "com.aware.phone", Context.MODE_PRIVATE, com.aware.R.xml.aware_preferences, true);
                 prefs.edit().commit();
             } else {
@@ -322,19 +326,25 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
 
             Map<String, ?> defaults = prefs.getAll();
             for (Map.Entry<String, ?> entry : defaults.entrySet()) {
+                // Skip webservice_server: see Aware.onStartCommand()'s copy of this loop for why —
+                // the cached "com.aware.phone" SharedPreferences default is a stale placeholder URL,
+                // not a real study join URL.
+                if (entry.getKey().equals(Aware_Preferences.WEBSERVICE_SERVER)) continue;
                 if (Aware.getSetting(getApplicationContext(), entry.getKey(), "com.aware.phone").length() == 0) {
                     Aware.setSetting(getApplicationContext(), entry.getKey(), entry.getValue(), "com.aware.phone"); //default AWARE settings
                 }
             }
 
-            if (Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID).length() == 0) {
+            if (Aware.getDeviceID(getApplicationContext()).length() == 0) {
                 UUID uuid = UUID.randomUUID();
                 Aware.setSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID, uuid.toString(), "com.aware.phone");
             }
 
-            if (Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER).length() == 0) {
-                Aware.setSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER, "https://api.awareframework.com/index.php");
-            }
+            // Deliberately no "if empty, default to the public AWARE demo server" fallback here
+            // anymore — see Aware.onStartCommand() for why. This legacy Activity (com.aware.phone.
+            // Aware_Client, distinct from com.aware.phone.ui.Aware_Client) is still reachable via the
+            // android.support.PARENT_ACTIVITY meta-data on Aware_QRCode/Plugins_Manager/Aware_Join_Study
+            // in AndroidManifest.xml, so it still runs and can still poison this setting.
 
             Set<String> keys = optionalSensors.keySet();
             for (String optionalSensor : keys) {
@@ -454,7 +464,7 @@ public class Aware_Client extends Aware_Activity implements SharedPreferences.On
 
             //Ping AWARE's server with getApplicationContext() device's information for framework's statistics log
             Hashtable<String, String> device_ping = new Hashtable<>();
-            device_ping.put(Aware_Preferences.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+            device_ping.put(Aware_Preferences.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
             device_ping.put("ping", String.valueOf(System.currentTimeMillis()));
             device_ping.put("platform", "android");
             try {

@@ -18,6 +18,7 @@ import com.aware.providers.Aware_Provider;
 import com.aware.providers.Mqtt_Provider;
 import com.aware.providers.Mqtt_Provider.Mqtt_Messages;
 import com.aware.providers.Mqtt_Provider.Mqtt_Subscriptions;
+import com.aware.ui.ResearcherMessage;
 import com.aware.utils.Aware_Sensor;
 import com.aware.utils.SSLUtils;
 import com.aware.utils.Scheduler;
@@ -33,6 +34,7 @@ import org.eclipse.paho.client.mqttv3.MqttSecurityException;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
 import javax.net.SocketFactory;
 
@@ -102,6 +104,8 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
      * MQTT message received ID
      */
     public static final int MQTT_MSG_RECEIVED = 2;
+
+    private static final String NOTICE_TOPIC_SUFFIX = "/notice";
 
     /**
      * Broadcast event when a new MQTT message is received from any of the topics subscribed
@@ -185,7 +189,7 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
     public void messageArrived(String topic, MqttMessage message) throws Exception {
         ContentValues rowData = new ContentValues();
         rowData.put(Mqtt_Messages.TIMESTAMP, System.currentTimeMillis());
-        rowData.put(Mqtt_Messages.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+        rowData.put(Mqtt_Messages.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
         rowData.put(Mqtt_Messages.TOPIC, topic);
         rowData.put(Mqtt_Messages.MESSAGE, message.toString());
         rowData.put(Mqtt_Messages.STATUS, MQTT_MSG_RECEIVED);
@@ -218,23 +222,28 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
             if (studyInfo != null && !studyInfo.isClosed()) studyInfo.close();
         }
 
-        if (topic.equalsIgnoreCase(Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/broadcasts") || topic.equalsIgnoreCase(study_id + "/" + Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/broadcasts")) {
+        if (topic.equalsIgnoreCase(Aware.getDeviceID(getApplicationContext()) + "/broadcasts") || topic.equalsIgnoreCase(study_id + "/" + Aware.getDeviceID(getApplicationContext()) + "/broadcasts")) {
             Intent broadcast = new Intent(message.toString());
             sendBroadcast(broadcast);
         }
 
-        if (topic.equalsIgnoreCase(Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/esm") || topic.equalsIgnoreCase(study_id + "/" + Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/esm")) {
+        if (topic.equalsIgnoreCase(Aware.getDeviceID(getApplicationContext()) + "/esm") || topic.equalsIgnoreCase(study_id + "/" + Aware.getDeviceID(getApplicationContext()) + "/esm")) {
             Intent queueESM = new Intent(ESM.ACTION_AWARE_QUEUE_ESM);
             queueESM.putExtra(ESM.EXTRA_ESM, message.toString());
             sendBroadcast(queueESM);
         }
 
-        if (topic.equalsIgnoreCase(Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/configuration") || topic.equalsIgnoreCase(study_id + "/" + Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/configuration")) {
+        if (topic.equalsIgnoreCase(Aware.getDeviceID(getApplicationContext()) + NOTICE_TOPIC_SUFFIX)
+                || topic.equalsIgnoreCase(study_id + "/" + Aware.getDeviceID(getApplicationContext()) + NOTICE_TOPIC_SUFFIX)) {
+            postResearcherMessage(message.toString());
+        }
+
+        if (topic.equalsIgnoreCase(Aware.getDeviceID(getApplicationContext()) + "/configuration") || topic.equalsIgnoreCase(study_id + "/" + Aware.getDeviceID(getApplicationContext()) + "/configuration")) {
             JSONArray configs = new JSONArray(message.toString());
             Aware.tweakSettings(getApplicationContext(), configs);
         }
 
-        if (topic.equalsIgnoreCase(Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/schedulers") || topic.equalsIgnoreCase(study_id + "/" + Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/schedulers")) {
+        if (topic.equalsIgnoreCase(Aware.getDeviceID(getApplicationContext()) + "/schedulers") || topic.equalsIgnoreCase(study_id + "/" + Aware.getDeviceID(getApplicationContext()) + "/schedulers")) {
             JSONArray schedules = new JSONArray(message.toString());
             try {
                 Log.d(TAG, "Setting schedules: " + schedules.toString(5));
@@ -243,6 +252,37 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
             }
             Scheduler.setSchedules(getApplicationContext(), schedules);
         }
+    }
+
+    private void postResearcherMessage(String rawMessage) {
+        String title = getString(R.string.aware_notif_researcher_message_title);
+        String body = rawMessage;
+        String messageId = rawMessage;
+        try {
+            JSONObject payload = new JSONObject(rawMessage);
+            title = payload.optString("title", title).trim();
+            body = payload.optString("message", payload.optString("instructions", "")).trim();
+            messageId = payload.optString("id", rawMessage);
+        } catch (JSONException ignored) {
+            // Plain-text notices remain supported for publishers outside the dashboard.
+        }
+        if (title.length() == 0) title = getString(R.string.aware_notif_researcher_message_title);
+        if (body.length() == 0) body = getString(R.string.aware_notif_researcher_message_body);
+
+        // Tapping opens the message itself. The words are carried in the intent
+        // because the phone keeps no copy of a notice anywhere else: nothing is
+        // recorded for one, so the notification and this screen are all there is.
+        Intent open = new Intent(this, ResearcherMessage.class);
+        open.putExtra(ResearcherMessage.EXTRA_TITLE, title);
+        open.putExtra(ResearcherMessage.EXTRA_BODY, body);
+
+        Aware.postGeneralNotification(
+                this,
+                "aware_researcher_message_" + Integer.toHexString(messageId.hashCode()),
+                Aware.AWARE_RESEARCHER_MESSAGE_NOTIFICATION_ID,
+                title,
+                body,
+                open);
     }
 
     @Override
@@ -275,7 +315,7 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
                     if (publish(topic, message)) {
                         ContentValues rowData = new ContentValues();
                         rowData.put(Mqtt_Messages.TIMESTAMP, System.currentTimeMillis());
-                        rowData.put(Mqtt_Messages.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                        rowData.put(Mqtt_Messages.DEVICE_ID, Aware.getDeviceID(context));
                         rowData.put(Mqtt_Messages.TOPIC, topic);
                         rowData.put(Mqtt_Messages.MESSAGE, message);
                         rowData.put(Mqtt_Messages.STATUS, MQTT_MSG_PUBLISHED);
@@ -300,7 +340,7 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
                         if (subscriptions == null || !subscriptions.moveToFirst()) {
                             ContentValues rowData = new ContentValues();
                             rowData.put(Mqtt_Subscriptions.TIMESTAMP, System.currentTimeMillis());
-                            rowData.put(Mqtt_Subscriptions.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                            rowData.put(Mqtt_Subscriptions.DEVICE_ID, Aware.getDeviceID(context));
                             rowData.put(Mqtt_Subscriptions.TOPIC, topic);
 
                             try {
@@ -410,14 +450,20 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
         }
 
         MQTT_SERVER = server;
-        MQTT_PORT = Aware.getSetting(getApplicationContext(), Aware_Preferences.MQTT_PORT);
+        int mqttPort = Aware.getSettingAsInt(
+                getApplicationContext(), Aware_Preferences.MQTT_PORT, 8883);
+        if (mqttPort < 1 || mqttPort > 65535) mqttPort = 8883;
+        MQTT_PORT = Integer.toString(mqttPort);
         MQTT_USERNAME = Aware.getSetting(getApplicationContext(), Aware_Preferences.MQTT_USERNAME);
         MQTT_PASSWORD = Aware.getSetting(getApplicationContext(), Aware_Preferences.MQTT_PASSWORD);
-        MQTT_KEEPALIVE = (Aware.getSetting(getApplicationContext(), Aware_Preferences.MQTT_KEEP_ALIVE).length() > 0 ? Aware.getSetting(getApplicationContext(), Aware_Preferences.MQTT_KEEP_ALIVE) : "600");
-        MQTT_QoS = Aware.getSetting(getApplicationContext(), Aware_Preferences.MQTT_QOS);
+        int keepAlive = Math.max(10, Math.min(3600, Aware.getSettingAsInt(
+                getApplicationContext(), Aware_Preferences.MQTT_KEEP_ALIVE, 600)));
+        MQTT_KEEPALIVE = Integer.toString(keepAlive);
+        int qos = Math.max(0, Math.min(2, Aware.getSettingAsInt(
+                getApplicationContext(), Aware_Preferences.MQTT_QOS, 2)));
+        MQTT_QoS = Integer.toString(qos);
 
-        if (Integer.parseInt(MQTT_PORT) == 1883) MQTT_PROTOCOL = "tcp";
-        if (Integer.parseInt(MQTT_PORT) == 8883) MQTT_PROTOCOL = "ssl";
+        MQTT_PROTOCOL = mqttPort == 1883 ? "tcp" : "ssl";
 
         String MQTT_URL = MQTT_PROTOCOL + "://" + MQTT_SERVER + ":" + MQTT_PORT;
 
@@ -426,8 +472,8 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
 
         MqttConnectOptions MQTT_OPTIONS = new MqttConnectOptions();
         MQTT_OPTIONS.setCleanSession(false); //resume pending messages from server
-        MQTT_OPTIONS.setConnectionTimeout(Integer.parseInt(MQTT_KEEPALIVE) + 10); //add 10 seconds to keep alive as options timeout
-        MQTT_OPTIONS.setKeepAliveInterval(Integer.parseInt(MQTT_KEEPALIVE));
+        MQTT_OPTIONS.setConnectionTimeout(Math.min(60, keepAlive + 10));
+        MQTT_OPTIONS.setKeepAliveInterval(keepAlive);
         MQTT_OPTIONS.setMqttVersion(MqttConnectOptions.MQTT_VERSION_3_1_1);
         MQTT_OPTIONS.setAutomaticReconnect(true);
 
@@ -446,7 +492,7 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
 
             MQTT_CLIENT = new MqttClient(
                     MQTT_URL,
-                    String.valueOf(Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID).hashCode()),
+                    String.valueOf(Aware.getDeviceID(getApplicationContext()).hashCode()),
                     MQTT_MESSAGES_PERSISTENCE);
 
             MQTT_CLIENT.setCallback(this);
@@ -502,23 +548,23 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
                     Cursor studyInfo = Aware.getStudy(getApplicationContext(), Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER));
                     if (studyInfo != null && studyInfo.moveToFirst()) {
                         Intent studySubscribe = new Intent(ACTION_AWARE_MQTT_TOPIC_SUBSCRIBE);
-                        studySubscribe.putExtra(EXTRA_TOPIC, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)) + "/" + Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/broadcasts");
+                        studySubscribe.putExtra(EXTRA_TOPIC, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)) + "/" + Aware.getDeviceID(getApplicationContext()) + "/broadcasts");
                         sendBroadcast(studySubscribe);
 
                         studySubscribe = new Intent(ACTION_AWARE_MQTT_TOPIC_SUBSCRIBE);
-                        studySubscribe.putExtra(EXTRA_TOPIC, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)) + "/" + Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/esm");
+                        studySubscribe.putExtra(EXTRA_TOPIC, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)) + "/" + Aware.getDeviceID(getApplicationContext()) + "/esm");
                         sendBroadcast(studySubscribe);
 
                         studySubscribe = new Intent(ACTION_AWARE_MQTT_TOPIC_SUBSCRIBE);
-                        studySubscribe.putExtra(EXTRA_TOPIC, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)) + "/" + Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/configuration");
+                        studySubscribe.putExtra(EXTRA_TOPIC, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)) + "/" + Aware.getDeviceID(getApplicationContext()) + "/configuration");
                         sendBroadcast(studySubscribe);
 
                         studySubscribe = new Intent(ACTION_AWARE_MQTT_TOPIC_SUBSCRIBE);
-                        studySubscribe.putExtra(EXTRA_TOPIC, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)) + "/" + Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/schedulers");
+                        studySubscribe.putExtra(EXTRA_TOPIC, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)) + "/" + Aware.getDeviceID(getApplicationContext()) + "/schedulers");
                         sendBroadcast(studySubscribe);
 
                         studySubscribe = new Intent(ACTION_AWARE_MQTT_TOPIC_SUBSCRIBE);
-                        studySubscribe.putExtra(EXTRA_TOPIC, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)) + "/" + Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/#");
+                        studySubscribe.putExtra(EXTRA_TOPIC, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)) + "/" + Aware.getDeviceID(getApplicationContext()) + "/#");
                         sendBroadcast(studySubscribe);
                     }
                     if (studyInfo != null && !studyInfo.isClosed()) studyInfo.close();
@@ -526,23 +572,23 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
 
                 //Self-subscribes
                 Intent selfSubscribe = new Intent(ACTION_AWARE_MQTT_TOPIC_SUBSCRIBE);
-                selfSubscribe.putExtra(EXTRA_TOPIC, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/broadcasts");
+                selfSubscribe.putExtra(EXTRA_TOPIC, Aware.getDeviceID(getApplicationContext()) + "/broadcasts");
                 sendBroadcast(selfSubscribe);
 
                 selfSubscribe = new Intent(ACTION_AWARE_MQTT_TOPIC_SUBSCRIBE);
-                selfSubscribe.putExtra(EXTRA_TOPIC, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/esm");
+                selfSubscribe.putExtra(EXTRA_TOPIC, Aware.getDeviceID(getApplicationContext()) + "/esm");
                 sendBroadcast(selfSubscribe);
 
                 selfSubscribe = new Intent(ACTION_AWARE_MQTT_TOPIC_SUBSCRIBE);
-                selfSubscribe.putExtra(EXTRA_TOPIC, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/configuration");
+                selfSubscribe.putExtra(EXTRA_TOPIC, Aware.getDeviceID(getApplicationContext()) + "/configuration");
                 sendBroadcast(selfSubscribe);
 
                 selfSubscribe = new Intent(ACTION_AWARE_MQTT_TOPIC_SUBSCRIBE);
-                selfSubscribe.putExtra(EXTRA_TOPIC, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/schedulers");
+                selfSubscribe.putExtra(EXTRA_TOPIC, Aware.getDeviceID(getApplicationContext()) + "/schedulers");
                 sendBroadcast(selfSubscribe);
 
                 selfSubscribe = new Intent(ACTION_AWARE_MQTT_TOPIC_SUBSCRIBE);
-                selfSubscribe.putExtra(EXTRA_TOPIC, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID) + "/#");
+                selfSubscribe.putExtra(EXTRA_TOPIC, Aware.getDeviceID(getApplicationContext()) + "/#");
                 sendBroadcast(selfSubscribe);
 
                 if (MQTT_CLIENT != null && MQTT_CLIENT.isConnected()) {

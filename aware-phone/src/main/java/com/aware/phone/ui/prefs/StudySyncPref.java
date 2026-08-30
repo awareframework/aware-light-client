@@ -42,6 +42,7 @@ public class StudySyncPref extends Preference {
                 Toast.makeText(getContext(), "Checking for updates...", Toast.LENGTH_SHORT).show();
                 Intent sync = new Intent(Aware.ACTION_AWARE_SYNC_CONFIG);
                 sync.putExtra(Aware.SYNC_CONFIG_EXTRA_TOAST, true);
+                sync.putExtra(Aware.SYNC_CONFIG_EXTRA_MANUAL, true);
                 getContext().sendBroadcast(sync);
             }
         });

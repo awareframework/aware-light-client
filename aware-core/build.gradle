@@ -81,7 +81,17 @@ dependencies {
     implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0-alpha'
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "com.squareup.okhttp3:okhttp:4.2.2"
-    implementation files('libs/mysql-connector-java-5.1.48.jar')
-    implementation files('libs/jsonassert-1.5.0.jar')
+    // Was vendored as libs/mysql-connector-java-5.1.48.jar (a binary committed to git with no
+    // update path). Same version, sourced from Maven Central instead so it's a normal tracked
+    // dependency. The 5.1.x line itself is EOL — moving to the current com.mysql:mysql-connector-j
+    // 8.x is a separate, larger change (driver class name and connection URL params changed
+    // between the lines) and needs a real device/DB test pass before swapping, tracked as its own
+    // follow-up rather than bundled into this dependency-hygiene fix.
+    implementation "mysql:mysql-connector-java:5.1.49"
+    // Was vendored as libs/jsonassert-1.5.0.jar — identical version, now from Maven Central.
+    // Group is org.skyscreamer there, not com.github.skyscreamer (that's a JitPack-style coordinate).
+    implementation "org.skyscreamer:jsonassert:1.5.0"
+
+    testImplementation 'junit:junit:4.13.2'
 }
 

@@ -127,7 +127,7 @@ public class Encrypter {
             for (String command: hashProgramCommands) {
                 if (command.equals("salt=device_id")) {
                     // Salt using the device_id
-                    clear = clear + Aware.getSetting(context, Aware_Preferences.DEVICE_ID);
+                    clear = clear + Aware.getDeviceID(context);
                 } else if (command.startsWith("salt=")) {
                     // Salt using any string
                     String[] command_split = command.split("=");

@@ -202,7 +202,7 @@ public class Network extends Aware_Sensor {
             if (serviceState.getState() == ServiceState.STATE_POWER_OFF) {
                 ContentValues mobile = new ContentValues();
                 mobile.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                mobile.put(Network_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                mobile.put(Network_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                 mobile.put(Network_Data.TYPE, NETWORK_TYPE_MOBILE);
                 mobile.put(Network_Data.SUBTYPE, "MOBILE");
                 mobile.put(Network_Data.STATE, STATUS_OFF);
@@ -223,7 +223,7 @@ public class Network extends Aware_Sensor {
             } else {
                 ContentValues mobile = new ContentValues();
                 mobile.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                mobile.put(Network_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                mobile.put(Network_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                 mobile.put(Network_Data.TYPE, NETWORK_TYPE_MOBILE);
                 mobile.put(Network_Data.SUBTYPE, "MOBILE");
                 mobile.put(Network_Data.STATE, STATUS_ON);
@@ -261,7 +261,7 @@ public class Network extends Aware_Sensor {
                 if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                     ContentValues started = new ContentValues();
                     started.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                    started.put(Network_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    started.put(Network_Data.DEVICE_ID, Aware.getDeviceID(context));
                     started.put(Network_Data.TYPE, NETWORK_TYPE_GPS);
                     started.put(Network_Data.SUBTYPE, "GPS");
                     started.put(Network_Data.STATE, STATUS_ON);
@@ -282,7 +282,7 @@ public class Network extends Aware_Sensor {
                 } else {
                     ContentValues stopped = new ContentValues();
                     stopped.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                    stopped.put(Network_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    stopped.put(Network_Data.DEVICE_ID, Aware.getDeviceID(context));
                     stopped.put(Network_Data.TYPE, NETWORK_TYPE_GPS);
                     stopped.put(Network_Data.SUBTYPE, "GPS");
                     stopped.put(Network_Data.STATE, STATUS_OFF);
@@ -310,7 +310,7 @@ public class Network extends Aware_Sensor {
                 if (is_airplane) {
                     ContentValues rowData = new ContentValues();
                     rowData.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Network_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Network_Data.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Network_Data.TYPE, NETWORK_TYPE_AIRPLANE);
                     rowData.put(Network_Data.SUBTYPE, "AIRPLANE");
                     rowData.put(Network_Data.STATE, STATUS_ON);
@@ -331,7 +331,7 @@ public class Network extends Aware_Sensor {
                 } else {
                     ContentValues rowData = new ContentValues();
                     rowData.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Network_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Network_Data.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Network_Data.TYPE, NETWORK_TYPE_AIRPLANE);
                     rowData.put(Network_Data.SUBTYPE, "AIRPLANE");
                     rowData.put(Network_Data.STATE, STATUS_OFF);
@@ -359,7 +359,7 @@ public class Network extends Aware_Sensor {
                 if (wifi_state == WifiManager.WIFI_STATE_ENABLED) {
                     ContentValues data = new ContentValues();
                     data.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                    data.put(Network_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    data.put(Network_Data.DEVICE_ID, Aware.getDeviceID(context));
                     data.put(Network_Data.TYPE, NETWORK_TYPE_WIFI);
                     data.put(Network_Data.SUBTYPE, "WIFI");
                     data.put(Network_Data.STATE, STATUS_ON);
@@ -380,7 +380,7 @@ public class Network extends Aware_Sensor {
                 } else if (wifi_state == WifiManager.WIFI_STATE_DISABLED) {
                     ContentValues data = new ContentValues();
                     data.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                    data.put(Network_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    data.put(Network_Data.DEVICE_ID, Aware.getDeviceID(context));
                     data.put(Network_Data.TYPE, NETWORK_TYPE_WIFI);
                     data.put(Network_Data.SUBTYPE, "WIFI");
                     data.put(Network_Data.STATE, STATUS_OFF);
@@ -408,7 +408,7 @@ public class Network extends Aware_Sensor {
                 if (bt_state == BluetoothAdapter.STATE_ON) {
                     ContentValues rowData = new ContentValues();
                     rowData.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Network_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Network_Data.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Network_Data.TYPE, NETWORK_TYPE_BLUETOOTH);
                     rowData.put(Network_Data.SUBTYPE, "BLUETOOTH");
                     rowData.put(Network_Data.STATE, STATUS_ON);
@@ -429,7 +429,7 @@ public class Network extends Aware_Sensor {
                 } else if (bt_state == BluetoothAdapter.STATE_OFF) {
                     ContentValues rowData = new ContentValues();
                     rowData.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Network_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Network_Data.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Network_Data.TYPE, NETWORK_TYPE_BLUETOOTH);
                     rowData.put(Network_Data.SUBTYPE, "BLUETOOTH");
                     rowData.put(Network_Data.STATE, STATUS_OFF);
@@ -456,7 +456,7 @@ public class Network extends Aware_Sensor {
                     if (wimax.getState() == NetworkInfo.State.CONNECTED) {
                         ContentValues data = new ContentValues();
                         data.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                        data.put(Network_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                        data.put(Network_Data.DEVICE_ID, Aware.getDeviceID(context));
                         data.put(Network_Data.TYPE, NETWORK_TYPE_WIMAX);
                         data.put(Network_Data.SUBTYPE, "WIMAX");
                         data.put(Network_Data.STATE, STATUS_ON);
@@ -477,7 +477,7 @@ public class Network extends Aware_Sensor {
                     } else if (wimax.getState() == NetworkInfo.State.DISCONNECTED) {
                         ContentValues data = new ContentValues();
                         data.put(Network_Data.TIMESTAMP, System.currentTimeMillis());
-                        data.put(Network_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                        data.put(Network_Data.DEVICE_ID, Aware.getDeviceID(context));
                         data.put(Network_Data.TYPE, NETWORK_TYPE_WIMAX);
                         data.put(Network_Data.SUBTYPE, "WIMAX");
                         data.put(Network_Data.STATE, STATUS_OFF);
@@ -592,7 +592,7 @@ public class Network extends Aware_Sensor {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Network_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Network_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Network_Provider.getAuthority(this))

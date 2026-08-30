@@ -114,20 +114,19 @@ public class Plugin extends Aware_Plugin implements GoogleApiClient.ConnectionCa
                 Aware.setSetting(getApplicationContext(), Settings.UNITS_PLUGIN_OPENWEATHER, "metric");
 
             if (Aware.getSetting(getApplicationContext(), Settings.PLUGIN_OPENWEATHER_FREQUENCY).length() == 0)
-                Aware.setSetting(getApplicationContext(), Settings.PLUGIN_OPENWEATHER_FREQUENCY, 60);
+                Aware.setSetting(getApplicationContext(), Settings.PLUGIN_OPENWEATHER_FREQUENCY, 30);
 
-            if (Aware.getSetting(getApplicationContext(), Settings.OPENWEATHER_API_KEY).length() == 0)
-                Aware.setSetting(getApplicationContext(), Settings.OPENWEATHER_API_KEY, "ada11fb870974565377df238f3046aa9");
 
             if (mGoogleApiClient != null && !mGoogleApiClient.isConnected())
                 mGoogleApiClient.connect();
 
             try {
                 Scheduler.Schedule openweather = Scheduler.getSchedule(this, SCHEDULER_PLUGIN_OPENWEATHER);
-                if (openweather == null || openweather.getInterval() != Long.parseLong(Aware.getSetting(getApplicationContext(), Settings.PLUGIN_OPENWEATHER_FREQUENCY))) {
+                long openweatherFrequency = Aware.getSettingAsLong(getApplicationContext(), Settings.PLUGIN_OPENWEATHER_FREQUENCY, 30);
+                if (openweather == null || openweather.getInterval() != openweatherFrequency) {
                     openweather = new Scheduler.Schedule(SCHEDULER_PLUGIN_OPENWEATHER);
                     openweather
-                            .setInterval(Long.parseLong(Aware.getSetting(getApplicationContext(), Settings.PLUGIN_OPENWEATHER_FREQUENCY)))
+                            .setInterval(openweatherFrequency)
                             .setActionType(Scheduler.ACTION_TYPE_SERVICE)
                             .setActionIntentAction(ACTION_AWARE_PLUGIN_OPENWEATHER_UPDATE)
                             .setActionClass(getPackageName() + "/" + Plugin.class.getName());
@@ -180,7 +179,7 @@ public class Plugin extends Aware_Plugin implements GoogleApiClient.ConnectionCa
 
                                     ContentValues weather_data = new ContentValues();
                                     weather_data.put(Provider.OpenWeather_Data.TIMESTAMP, System.currentTimeMillis());
-                                    weather_data.put(Provider.OpenWeather_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                                    weather_data.put(Provider.OpenWeather_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                                     weather_data.put(Provider.OpenWeather_Data.CITY, raw_data.getString("name"));
                                     weather_data.put(Provider.OpenWeather_Data.TEMPERATURE, weather_characteristics.getDouble("temp"));
                                     weather_data.put(Provider.OpenWeather_Data.TEMPERATURE_MAX, weather_characteristics.getDouble("temp_max"));
@@ -258,7 +257,7 @@ public class Plugin extends Aware_Plugin implements GoogleApiClient.ConnectionCa
             if (Aware.isStudy(this)) {
                 Account aware_account = Aware.getAWAREAccount(getApplicationContext());
                 String authority = Provider.getAuthority(getApplicationContext());
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
 
                 ContentResolver.setIsSyncable(aware_account, authority, 1);
                 ContentResolver.setSyncAutomatically(aware_account, authority, true);
@@ -312,8 +311,15 @@ public class Plugin extends Aware_Plugin implements GoogleApiClient.ConnectionCa
         if (DEBUG)
             Log.i(TAG, "Connected to Google Fused Location API");
 
-        locationRequest.setInterval(Long.parseLong(Aware.getSetting(this, Settings.PLUGIN_OPENWEATHER_FREQUENCY)) * 60 * 1000);
-        locationRequest.setFastestInterval(Long.parseLong(Aware.getSetting(this, Settings.PLUGIN_OPENWEATHER_FREQUENCY)) * 60 * 1000);
+        // This is an async Google Play Services callback, not routed through onStartCommand()'s own
+        // defaults-ensuring checks above — it can fire whenever Play Services decides to connect,
+        // including right after a concurrent config sync's Aware.reset() has wiped this setting and
+        // before it's been re-applied. getSettingAsLong() tolerates that (empty or malformed) and
+        // falls back to the same default as onStartCommand()'s check, same fix as ambient_noise's
+        // AudioAnalyser for the same race.
+        long openweatherFrequency = Aware.getSettingAsLong(getApplicationContext(), Settings.PLUGIN_OPENWEATHER_FREQUENCY, 30);
+        locationRequest.setInterval(openweatherFrequency * 60 * 1000);
+        locationRequest.setFastestInterval(openweatherFrequency * 60 * 1000);
         locationRequest.setPriority(LocationRequest.PRIORITY_LOW_POWER);
 
         try {

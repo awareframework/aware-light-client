@@ -1,16 +1,12 @@
 
 package com.aware;
 
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.database.Cursor;
-import android.database.SQLException;
-import android.database.sqlite.SQLiteException;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -26,9 +22,8 @@ import com.aware.providers.Temperature_Provider;
 import com.aware.providers.Temperature_Provider.Temperature_Data;
 import com.aware.providers.Temperature_Provider.Temperature_Sensor;
 import com.aware.utils.Aware_Sensor;
-
-import java.util.ArrayList;
-import java.util.List;
+import com.aware.utils.SensorDataBuffer;
+import com.aware.utils.SensorTimeUnits;
 
 /**
  * AWARE Temperature module
@@ -65,27 +60,12 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
      * ContentProvider: Temperature_Provider
      */
     public static final String ACTION_AWARE_TEMPERATURE = "ACTION_AWARE_TEMPERATURE";
-    public static final String ACTION_AWARE_TEMPERATURE_LABEL = "ACTION_AWARE_TEMPERATURE_LABEL";
-    public static final String EXTRA_LABEL = "label";
 
     /**
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
-    private List<ContentValues> data_values = new ArrayList<ContentValues>();
-
-    private static String LABEL = "";
-
-    private static DataLabel dataLabeler = new DataLabel();
-
-    public static class DataLabel extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_AWARE_TEMPERATURE_LABEL)) {
-                LABEL = intent.getStringExtra(EXTRA_LABEL);
-            }
-        }
-    }
+    private SensorDataBuffer dataBuffer;
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -104,43 +84,28 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
         LAST_VALUE = event.values[0];
 
         ContentValues rowData = new ContentValues();
-        rowData.put(Temperature_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+        rowData.put(Temperature_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
         rowData.put(Temperature_Data.TIMESTAMP, TS);
         rowData.put(Temperature_Data.TEMPERATURE_CELSIUS, event.values[0]);
         rowData.put(Temperature_Data.ACCURACY, event.accuracy);
-        rowData.put(Temperature_Data.LABEL, LABEL);
 
         if (awareSensor != null) awareSensor.onTemperatureChanged(rowData);
 
-        data_values.add(rowData);
+        boolean buffered = dataBuffer.add(rowData);
         LAST_TS = TS;
+        if (!buffered) return;
 
-        if (data_values.size() < 250 && TS < LAST_SAVE + 300000) {
+        if (dataBuffer.size() < SensorDataBuffer.BATCH_SIZE && TS < LAST_SAVE + 300000) {
             return;
         }
 
-        final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-        data_values.toArray(data_buffer);
-
-        try {
-            if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        getContentResolver().bulkInsert(Temperature_Provider.Temperature_Data.CONTENT_URI, data_buffer);
-
-                        Intent accelData = new Intent(ACTION_AWARE_TEMPERATURE);
-                        sendBroadcast(accelData);
-                    }
-                }).run();
-            }
-        } catch (SQLiteException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-        } catch (SQLException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        if (dataBuffer.flush(isDatabaseWriteSuppressed())) {
+            LAST_SAVE = TS;
         }
-        data_values.clear();
-        LAST_SAVE = TS;
+    }
+
+    private boolean isDatabaseWriteSuppressed() {
+        return Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true");
     }
 
     private static Temperature.AWARESensorObserver awareSensor;
@@ -178,7 +143,7 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
         Cursor sensorInfo = getContentResolver().query(Temperature_Sensor.CONTENT_URI, null, null, null, null);
         if (sensorInfo == null || !sensorInfo.moveToFirst()) {
             ContentValues rowData = new ContentValues();
-            rowData.put(Temperature_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+            rowData.put(Temperature_Sensor.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
             rowData.put(Temperature_Sensor.TIMESTAMP, System.currentTimeMillis());
             rowData.put(Temperature_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
             rowData.put(Temperature_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
@@ -201,6 +166,7 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
         super.onCreate();
 
         AUTHORITY = Temperature_Provider.getAuthority(this);
+        dataBuffer = new SensorDataBuffer(this, Temperature_Data.CONTENT_URI, ACTION_AWARE_TEMPERATURE, TAG);
 
         mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
 
@@ -212,10 +178,6 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
         wakeLock.acquire();
 
         sensorHandler = new Handler(sensorThread.getLooper());
-
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_AWARE_TEMPERATURE_LABEL);
-        registerReceiver(dataLabeler, filter);
 
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.HONEYCOMB) {
             mTemperature = mSensorManager.getDefaultSensor(Sensor.TYPE_TEMPERATURE);
@@ -233,10 +195,9 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
         sensorHandler.removeCallbacksAndMessages(null);
         mSensorManager.unregisterListener(this, mTemperature);
         sensorThread.quit();
+        dataBuffer.close(isDatabaseWriteSuppressed());
 
         wakeLock.release();
-
-        unregisterReceiver(dataLabeler);
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Temperature_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(
@@ -264,15 +225,15 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
                 saveSensorDevice(mTemperature);
 
                 if (Aware.getSetting(this, Aware_Preferences.FREQUENCY_TEMPERATURE).length() == 0) {
-                    Aware.setSetting(this, Aware_Preferences.FREQUENCY_TEMPERATURE, 200000);
+                    Aware.setSetting(this, Aware_Preferences.FREQUENCY_TEMPERATURE, 10000000);
                 }
 
                 if (Aware.getSetting(this, Aware_Preferences.THRESHOLD_TEMPERATURE).length() == 0) {
                     Aware.setSetting(this, Aware_Preferences.THRESHOLD_TEMPERATURE, 0.0);
                 }
 
-                int new_frequency = Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_TEMPERATURE));
-                double new_threshold = Double.parseDouble(Aware.getSetting(getApplicationContext(), Aware_Preferences.THRESHOLD_TEMPERATURE));
+                int new_frequency = Aware.getSettingAsInt(getApplicationContext(), Aware_Preferences.FREQUENCY_TEMPERATURE, 10000000);
+                double new_threshold = Aware.getSettingAsDouble(getApplicationContext(), Aware_Preferences.THRESHOLD_TEMPERATURE, 0.0);
                 boolean new_enforce_frequency = (Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_TEMPERATURE_ENFORCE).equals("true")
                         || Aware.getSetting(getApplicationContext(), Aware_Preferences.ENFORCE_FREQUENCY_ALL).equals("true"));
 
@@ -288,7 +249,7 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
                     ENFORCE_FREQUENCY = new_enforce_frequency;
                 }
 
-                mSensorManager.registerListener(this, mTemperature, Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_TEMPERATURE)), sensorHandler);
+                mSensorManager.registerListener(this, mTemperature, SensorTimeUnits.samplingPeriodUs(new_frequency), sensorHandler);
                 LAST_SAVE = System.currentTimeMillis();
 
                 if (Aware.DEBUG) Log.d(TAG, "Temperature service active...");
@@ -297,7 +258,7 @@ public class Temperature extends Aware_Sensor implements SensorEventListener {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Temperature_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Temperature_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Temperature_Provider.getAuthority(this))

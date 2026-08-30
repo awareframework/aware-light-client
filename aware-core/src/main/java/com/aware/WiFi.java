@@ -26,6 +26,7 @@ import com.aware.providers.WiFi_Provider.WiFi_Data;
 import com.aware.providers.WiFi_Provider.WiFi_Sensor;
 import com.aware.utils.Aware_Sensor;
 import com.aware.utils.Encrypter;
+import com.aware.utils.SensorTimeUnits;
 
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -133,7 +134,7 @@ public class WiFi extends Aware_Sensor {
                 }
 
                 alarmManager.cancel(wifiScan);
-                alarmManager.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 1000, Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_WIFI)) * 1000, wifiScan);
+                alarmManager.setRepeating(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + 1000, SensorTimeUnits.secondsToMillis(Aware.getSettingAsInt(getApplicationContext(), Aware_Preferences.FREQUENCY_WIFI, 60)), wifiScan);
 
                 if (Aware.DEBUG) Log.d(TAG, "WiFi service active...");
             }
@@ -141,7 +142,7 @@ public class WiFi extends Aware_Sensor {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), WiFi_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), WiFi_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), WiFi_Provider.getAuthority(this))
@@ -203,7 +204,7 @@ public class WiFi extends Aware_Sensor {
         @Override
         public String call() throws Exception {
             ContentValues rowData = new ContentValues();
-            rowData.put(WiFi_Sensor.DEVICE_ID, Aware.getSetting(mContext, Aware_Preferences.DEVICE_ID));
+            rowData.put(WiFi_Sensor.DEVICE_ID, Aware.getDeviceID(mContext));
             rowData.put(WiFi_Sensor.TIMESTAMP, System.currentTimeMillis());
             rowData.put(WiFi_Sensor.MAC_ADDRESS, Encrypter.hashMac(mContext, mWifi.getMacAddress()));
             rowData.put(WiFi_Sensor.BSSID, Encrypter.hashMac(mContext, mWifi.getBSSID()));
@@ -247,7 +248,7 @@ public class WiFi extends Aware_Sensor {
 
             for (ScanResult ap : mAPS) {
                 ContentValues rowData = new ContentValues();
-                rowData.put(WiFi_Data.DEVICE_ID, Aware.getSetting(mContext, Aware_Preferences.DEVICE_ID));
+                rowData.put(WiFi_Data.DEVICE_ID, Aware.getDeviceID(mContext));
                 rowData.put(WiFi_Data.TIMESTAMP, currentScan);
                 rowData.put(WiFi_Data.BSSID, Encrypter.hashMac(mContext, ap.BSSID));
                 rowData.put(WiFi_Data.SSID, Encrypter.hashSsid(mContext, ap.SSID));
@@ -320,7 +321,7 @@ public class WiFi extends Aware_Sensor {
                             }
 
                             ContentValues rowData = new ContentValues();
-                            rowData.put(WiFi_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                            rowData.put(WiFi_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                             rowData.put(WiFi_Data.TIMESTAMP, System.currentTimeMillis());
                             rowData.put(WiFi_Data.LABEL, "disabled");
 
@@ -328,13 +329,17 @@ public class WiFi extends Aware_Sensor {
 
                             if (awareSensor != null) awareSensor.onWiFiDisabled();
                         }
-                    } catch (NullPointerException e) {
+                    } catch (NullPointerException | SecurityException e) {
+                        // SecurityException: wifiManager.startScan() throws this when the phone's
+                        // OS-level Location service is off — required system-wide for WiFi scan
+                        // results regardless of any app permission. Previously uncaught here, this
+                        // crashed the service every time Location was disabled.
                         if (Aware.DEBUG) {
-                            Log.d(WiFi.TAG, "WiFi is off");
+                            Log.d(WiFi.TAG, "WiFi scan failed: " + e.getMessage());
                         }
 
                         ContentValues rowData = new ContentValues();
-                        rowData.put(WiFi_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                        rowData.put(WiFi_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                         rowData.put(WiFi_Data.TIMESTAMP, System.currentTimeMillis());
                         rowData.put(WiFi_Data.LABEL, "disabled");
 

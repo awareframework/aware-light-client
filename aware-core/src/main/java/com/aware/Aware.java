@@ -36,6 +36,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.PermissionChecker;
 import com.aware.providers.Aware_Provider;
 import com.aware.providers.Aware_Provider.Aware_Device;
@@ -154,6 +155,36 @@ public class Aware extends Service {
      */
     public static final String ACTION_AWARE_SYNC_CONFIG = "ACTION_AWARE_SYNC_CONFIG";
     public static final String SYNC_CONFIG_EXTRA_TOAST = "SYNC_CONFIG_EXTRA_TOAST";
+    /** True only for an explicit participant "Check for study updates" action. */
+    public static final String SYNC_CONFIG_EXTRA_MANUAL = "SYNC_CONFIG_EXTRA_MANUAL";
+    /** True after the participant approved the exact pending server configuration. */
+    public static final String SYNC_CONFIG_EXTRA_APPROVED = "SYNC_CONFIG_EXTRA_APPROVED";
+    /**
+     * Broadcast after a study config update has been applied, so an open UI can refresh
+     * (e.g. rebuild the sensor list to reflect newly enabled/disabled sensors).
+     */
+    public static final String ACTION_AWARE_STUDY_CONFIG_UPDATED = "ACTION_AWARE_STUDY_CONFIG_UPDATED";
+    /**
+     * Broadcast when a study needs the participant to re-enter its database password (the researcher
+     * rotated it, so the stored password is now rejected). An open UI shows the re-auth prompt live
+     * instead of only on the next app open.
+     */
+    public static final String ACTION_AWARE_STUDY_REAUTH_REQUIRED = "ACTION_AWARE_STUDY_REAUTH_REQUIRED";
+    /** Broadcast when an editable-mode server configuration is awaiting participant approval. */
+    public static final String ACTION_AWARE_STUDY_CONFIG_UPDATE_AVAILABLE =
+            "ACTION_AWARE_STUDY_CONFIG_UPDATE_AVAILABLE";
+    /** String ArrayList extras on {@link #ACTION_AWARE_STUDY_CONFIG_UPDATED}: sensors newly enabled / disabled. */
+    public static final String EXTRA_SENSORS_ADDED = "sensors_added";
+    public static final String EXTRA_SENSORS_REMOVED = "sensors_removed";
+    /**
+     * Boolean extras on {@link #ACTION_AWARE_STUDY_CONFIG_UPDATED}: whether enable_config_update
+     * changed, and if so, its new value. EXTRA_CONFIG_UPDATE_ALLOWED_NEW_VALUE is only meaningful
+     * when EXTRA_CONFIG_UPDATE_ALLOWED_CHANGED is true.
+     */
+    public static final String EXTRA_CONFIG_UPDATE_ALLOWED_CHANGED = "config_update_allowed_changed";
+    public static final String EXTRA_CONFIG_UPDATE_ALLOWED_NEW_VALUE = "config_update_allowed_new_value";
+    /** Whether a study update was applied by the participant's explicit manual check. */
+    public static final String EXTRA_CONFIG_UPDATE_MANUAL = "config_update_manual";
 
     /**
      * Notification ID for AWARE service as foreground (to handle Doze, Android O battery optimizations)
@@ -163,7 +194,7 @@ public class Aware extends Service {
     /**
      * Used on the scheduler class to define global schedules for AWARE, SYNC and SPACE MAINTENANCE actions
      */
-    //public static final String SCHEDULE_SYNC_DATA = "schedule_aware_sync_data";
+    public static final String SCHEDULE_SYNC_DATA = "schedule_aware_sync_data";
     public static final String SCHEDULE_STUDY_COMPLIANCE = "schedule_aware_study_compliance";
     public static final String SCHEDULE_KEEP_ALIVE = "schedule_aware_keep_alive";
     public static final String SCHEDULE_SYNC_CONFIG = "schedule_aware_sync_config";
@@ -174,6 +205,7 @@ public class Aware extends Service {
     public static final String AWARE_NOTIFICATION_CHANNEL_GENERAL = "AWARE_NOTIFICATION_CHANNEL_GENERAL";
     public static final String AWARE_NOTIFICATION_CHANNEL_SILENT = "AWARE_NOTIFICATION_CHANNEL_SILENT";
     public static final String AWARE_NOTIFICATION_CHANNEL_DATASYNC = "AWARE_NOTIFICATION_CHANNEL_DATASYNC";
+    public static final String AWARE_NOTIFICATION_CHANNEL_FOREGROUND = "AWARE_FOREGROUND_SERVICE";
     public static final String ACTION_AWARE_START_PLUGIN = "ACTION_AWARE_START_PLUGIN";
     public static final String ACTION_AWARE_STOP_PLUGIN = "ACTION_AWARE_STOP_PLUGIN";
 
@@ -218,6 +250,26 @@ public class Aware extends Service {
      * Variable for the Doze ignore list
      */
     public static final int AWARE_BATTERY_OPTIMIZATION_ID = 567567;
+
+    /**
+     * "The study needs your password" notification. Its own id, so re-authenticating cancels it
+     * without disturbing any other AWARE notification.
+     */
+    public static final int AWARE_STUDY_REAUTH_NOTIFICATION_ID = 567568;
+
+    /**
+     * "The study changed" notification. Its own id: notifications sharing one id replace each other.
+     */
+    public static final int AWARE_STUDY_UPDATE_NOTIFICATION_ID = 567569;
+
+    /**
+     * "Data has not been delivered for a long time" notification. Posted once per outage and
+     * cancelled when delivery recovers, so it needs an id of its own.
+     */
+    public static final int AWARE_UPLOAD_HEALTH_NOTIFICATION_ID = 567570;
+
+    /** First id reserved for participant-facing researcher messages received over MQTT. */
+    public static final int AWARE_RESEARCHER_MESSAGE_NOTIFICATION_ID = 567571;
 
     /**
      * Holds a reference to the AWARE account, automatically restore in each plugin.
@@ -298,6 +350,21 @@ public class Aware extends Service {
             aware_channel_silent.enableVibration(false);
             aware_channel_silent.setSound(null,null);
             not_manager.createNotificationChannel(aware_channel_silent);
+
+            // Foreground-service notifications must remain visible. This separate channel uses LOW
+            // importance without sound or vibration; channel importance cannot be raised after a
+            // channel has already been created on the device.
+            NotificationChannel aware_channel_foreground = new NotificationChannel(
+                    AWARE_NOTIFICATION_CHANNEL_FOREGROUND,
+                    getResources().getString(R.string.channel_foreground_name),
+                    NotificationManager.IMPORTANCE_LOW);
+            aware_channel_foreground.setDescription(
+                    getResources().getString(R.string.channel_foreground_description));
+            aware_channel_foreground.enableLights(false);
+            aware_channel_foreground.enableVibration(false);
+            aware_channel_foreground.setSound(null, null);
+            aware_channel_foreground.setShowBadge(false);
+            not_manager.createNotificationChannel(aware_channel_foreground);
         }
 
         // Start the foreground service only if it's the client or a standalone application
@@ -355,20 +422,32 @@ public class Aware extends Service {
 
     public void foreground(boolean enable) {
         if (enable) {
-            Intent aware = new Intent(this, Aware.class);
-            PendingIntent onTap = PendingIntent.getService(this, 0, aware, 0);
+            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+            PendingIntent onTap = null;
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                onTap = PendingIntent.getActivity(
+                        this,
+                        0,
+                        launchIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            }
 
-            NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(this, Aware.AWARE_NOTIFICATION_CHANNEL_SILENT);
+            NotificationCompat.Builder mBuilder =
+                    new NotificationCompat.Builder(this, Aware.AWARE_NOTIFICATION_CHANNEL_FOREGROUND);
             mBuilder.setSmallIcon(R.drawable.ic_action_aware_studies);
             mBuilder.setContentTitle(getApplicationContext().getResources().getString(R.string.foreground_notification_title));
             mBuilder.setContentText(getApplicationContext().getResources().getString(R.string.foreground_notification_text));
             mBuilder.setOngoing(true);
             mBuilder.setOnlyAlertOnce(true);
-            mBuilder.setContentIntent(onTap);
-            mBuilder = Aware.setNotificationProperties(mBuilder, AWARE_NOTIFICATION_IMPORTANCE_SILENT);
+            mBuilder.setCategory(NotificationCompat.CATEGORY_SERVICE);
+            mBuilder.setPriority(NotificationCompat.PRIORITY_LOW);
+            mBuilder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+            mBuilder.setShowWhen(false);
+            if (onTap != null) mBuilder.setContentIntent(onTap);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                mBuilder.setChannelId(Aware.AWARE_NOTIFICATION_CHANNEL_SILENT);
+                mBuilder.setChannelId(Aware.AWARE_NOTIFICATION_CHANNEL_FOREGROUND);
 
             startForeground(Aware.AWARE_FOREGROUND_SERVICE, mBuilder.build());
         } else {
@@ -394,6 +473,7 @@ public class Aware extends Service {
                 return builder;
             case AWARE_NOTIFICATION_IMPORTANCE_GENERAL:
                 // default sound and vibration with HIGH priority
+                builder.setDefaults(Notification.DEFAULT_ALL);
                 builder.setPriority(NotificationCompat.PRIORITY_HIGH);
                 return builder;
             default:
@@ -401,7 +481,77 @@ public class Aware extends Service {
         }
     }
 
+    /**
+     * Posts a participant-facing notification on the same high-importance channel used for study
+     * updates. Android 8+ gets sound and vibration from the channel; older Android versions get
+     * them from {@link #setNotificationProperties(NotificationCompat.Builder, int)}.
+     */
+    public static void postGeneralNotification(Context context, int notificationId,
+                                               CharSequence title, CharSequence text) {
+        postGeneralNotification(context, null, notificationId, title, text);
+    }
+
+    /** Tagged notifications let an at-least-once transport redeliver without duplicating alerts. */
+    public static void postGeneralNotification(Context context, String notificationTag,
+                                               int notificationId,
+                                               CharSequence title, CharSequence text) {
+        postGeneralNotification(context, notificationTag, notificationId, title, text, null);
+    }
+
+    /**
+     * As above, opening {@code target} when the notification is tapped.
+     *
+     * Given one, a notification can take the participant to what it is about. The
+     * app's own launcher is the fallback and the right answer for most of these ---
+     * they are about the study rather than about a thing with a screen of its own.
+     */
+    public static void postGeneralNotification(Context context, String notificationTag,
+                                               int notificationId,
+                                               CharSequence title, CharSequence text,
+                                               Intent target) {
+        Intent open = target != null
+                ? target
+                : context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+        PendingIntent clickIntent = null;
+        if (open != null) {
+            // CLEAR_TASK is what the launcher wants and what a single screen does
+            // not: clearing the task under it would close whatever the participant
+            // was doing to show them one dialog.
+            open.setFlags(target != null
+                    ? Intent.FLAG_ACTIVITY_NEW_TASK
+                    : Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            clickIntent = PendingIntent.getActivity(
+                    context,
+                    notificationId,
+                    open,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        }
+
+        NotificationCompat.Builder builder =
+                new NotificationCompat.Builder(context, AWARE_NOTIFICATION_CHANNEL_GENERAL)
+                        .setChannelId(AWARE_NOTIFICATION_CHANNEL_GENERAL)
+                        .setSmallIcon(R.drawable.ic_stat_aware_accessibility)
+                        .setAutoCancel(true)
+                        .setOnlyAlertOnce(notificationTag != null)
+                        .setContentTitle(title)
+                        .setContentText(text)
+                        .setStyle(new NotificationCompat.BigTextStyle().bigText(text));
+        if (clickIntent != null) builder.setContentIntent(clickIntent);
+        builder = setNotificationProperties(builder, AWARE_NOTIFICATION_IMPORTANCE_GENERAL);
+
+        NotificationManager notificationManager =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager != null) {
+            if (notificationTag == null) notificationManager.notify(notificationId, builder.build());
+            else notificationManager.notify(notificationTag, notificationId, builder.build());
+        }
+    }
+
     private final SchedulerTicker schedulerTicker = new SchedulerTicker();
+    private static final long DONATION_PING_INTERVAL_MS = 24L * 60L * 60L * 1000L;
+    private static final java.util.concurrent.atomic.AtomicBoolean donationPingInFlight =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    private static volatile long lastDonationPingAt;
     public class SchedulerTicker extends BroadcastReceiver {
         long last_time = 0;
         long interval_ms = 60000; // Set in Aware class where we have context
@@ -431,7 +581,7 @@ public class Aware extends Service {
 
             //Ping AWARE's server with awareContext device's information for framework's statistics log
             Hashtable<String, String> device_ping = new Hashtable<>();
-            device_ping.put(Aware_Preferences.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+            device_ping.put(Aware_Preferences.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
             device_ping.put("ping", String.valueOf(System.currentTimeMillis()));
             device_ping.put("platform", "android");
             try {
@@ -450,6 +600,17 @@ public class Aware extends Service {
                 e.printStackTrace();
             }
             return true;
+        }
+
+        @Override
+        protected void onPostExecute(Boolean result) {
+            lastDonationPingAt = System.currentTimeMillis();
+            donationPingInFlight.set(false);
+        }
+
+        @Override
+        protected void onCancelled() {
+            donationPingInFlight.set(false);
         }
     }
 
@@ -503,7 +664,7 @@ public class Aware extends Service {
 
             //Ping AWARE's server with awareContext device's information for framework's statistics log
             Hashtable<String, String> studyCheck = new Hashtable<>();
-            studyCheck.put(Aware_Preferences.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+            studyCheck.put(Aware_Preferences.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
             studyCheck.put("study_check", "1");
 
             try {
@@ -571,42 +732,81 @@ public class Aware extends Service {
         }
     }
 
+    /** This device's facts as the platform reports them, keyed by aware_device column name. */
+    private static Map<String, String> deviceSnapshot() {
+        Map<String, String> snapshot = new HashMap<>();
+        snapshot.put(Aware_Device.BOARD, Build.BOARD);
+        snapshot.put(Aware_Device.DEVICE, Build.DEVICE);
+        snapshot.put(Aware_Device.BUILD_ID, Build.DISPLAY);
+        snapshot.put(Aware_Device.HARDWARE, Build.HARDWARE);
+        snapshot.put(Aware_Device.MANUFACTURER, Build.MANUFACTURER);
+        snapshot.put(Aware_Device.MODEL, Build.MODEL);
+        snapshot.put(Aware_Device.PRODUCT, Build.PRODUCT);
+        snapshot.put(Aware_Device.RELEASE, Build.VERSION.RELEASE);
+        snapshot.put(Aware_Device.SDK, String.valueOf(Build.VERSION.SDK_INT));
+        return snapshot;
+    }
+
+    /**
+     * Keeps this device's hardware and OS profile current in aware_device.
+     *
+     * The table holds one row per device — {@code UNIQUE(device_id)} permits exactly that — so the
+     * row is rewritten in place when the device's facts change, carrying a fresh timestamp. The sync
+     * selects rows newer than its marker, so an unchanged row is never re-sent and a rewritten one
+     * travels once: the server accumulates a row per real change, which is where the history of a
+     * mid-study Android upgrade lives.
+     *
+     * Runs on every intent delivered to this service, so it stays cheap: one single-row read of a
+     * table holding one row per device_id this phone has used.
+     */
     private void get_device_info() {
-        Cursor awareContextDevice = getContentResolver().query(Aware_Device.CONTENT_URI, null, null, null, null);
-        if (awareContextDevice == null || !awareContextDevice.moveToFirst()) {
-            ContentValues rowData = new ContentValues();
-            rowData.put(Aware_Device.TIMESTAMP, System.currentTimeMillis());
-            rowData.put(Aware_Device.DEVICE_ID, Aware.getSetting(this, Aware_Preferences.DEVICE_ID));
-            rowData.put(Aware_Device.BOARD, Build.BOARD);
-            rowData.put(Aware_Device.BRAND, Build.BRAND);
-            rowData.put(Aware_Device.DEVICE, Build.DEVICE);
-            rowData.put(Aware_Device.BUILD_ID, Build.DISPLAY);
-            rowData.put(Aware_Device.HARDWARE, Build.HARDWARE);
-            rowData.put(Aware_Device.MANUFACTURER, Build.MANUFACTURER);
-            rowData.put(Aware_Device.MODEL, Build.MODEL);
-            rowData.put(Aware_Device.PRODUCT, Build.PRODUCT);
-            rowData.put(Aware_Device.SERIAL, Build.SERIAL);
-            rowData.put(Aware_Device.RELEASE, Build.VERSION.RELEASE);
-            rowData.put(Aware_Device.RELEASE_TYPE, Build.TYPE);
-            rowData.put(Aware_Device.SDK, String.valueOf(Build.VERSION.SDK_INT));
-            rowData.put(Aware_Device.LABEL, Aware.getSetting(this, Aware_Preferences.DEVICE_LABEL));
+        String device_id = Aware.getDeviceID(this);
+        String currentLabel = Aware.getSetting(this, Aware_Preferences.DEVICE_LABEL);
+        Map<String, String> current = deviceSnapshot();
+        Map<String, String> stored = null;
+        String storedLabel = null;
 
-            try {
-                getContentResolver().insert(Aware_Device.CONTENT_URI, rowData);
-
-                Intent deviceData = new Intent(ACTION_AWARE_DEVICE_INFORMATION);
-                sendBroadcast(deviceData);
-
-                if (Aware.DEBUG) Log.d(TAG, "Device information:" + rowData.toString());
-
-            } catch (SQLiteException e) {
-                if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-            } catch (SQLException e) {
-                if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        Cursor storedRow = getContentResolver().query(Aware_Device.CONTENT_URI, null,
+                Aware_Device.DEVICE_ID + "=?", new String[]{device_id}, null);
+        if (storedRow != null && storedRow.moveToFirst()) {
+            stored = new HashMap<>();
+            for (String column : DeviceFacts.COMPARED_COLUMNS) {
+                int index = storedRow.getColumnIndex(column);
+                stored.put(column, index < 0 ? null : storedRow.getString(index));
             }
+            int labelIndex = storedRow.getColumnIndex(Aware_Device.LABEL);
+            storedLabel = labelIndex < 0 ? null : storedRow.getString(labelIndex);
         }
-        if (awareContextDevice != null && !awareContextDevice.isClosed())
-            awareContextDevice.close();
+        if (storedRow != null && !storedRow.isClosed()) storedRow.close();
+
+        if (DeviceFacts.unchanged(stored, current) && currentLabel.equals(storedLabel)) return;
+
+        ContentValues rowData = new ContentValues();
+        rowData.put(Aware_Device.TIMESTAMP, System.currentTimeMillis());
+        rowData.put(Aware_Device.DEVICE_ID, device_id);
+        rowData.put(Aware_Device.LABEL, currentLabel);
+        for (Map.Entry<String, String> fact : current.entrySet()) {
+            rowData.put(fact.getKey(), fact.getValue());
+        }
+
+        try {
+            if (stored == null) {
+                getContentResolver().insert(Aware_Device.CONTENT_URI, rowData);
+            } else {
+                getContentResolver().update(Aware_Device.CONTENT_URI, rowData,
+                        Aware_Device.DEVICE_ID + "=?", new String[]{device_id});
+            }
+
+            Intent deviceData = new Intent(ACTION_AWARE_DEVICE_INFORMATION);
+            sendBroadcast(deviceData);
+
+            if (Aware.DEBUG) Log.d(TAG, "Device information:" + rowData.toString());
+
+        } catch (SQLiteException e) {
+            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        } catch (SQLException e) {
+            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        }
     }
 
     /**
@@ -639,13 +839,59 @@ public class Aware extends Service {
         return participant;
     }
 
+    /**
+     * The kinds of record aware_log holds, stored in {@code log_type}.
+     *
+     * A log entry's kind is what analysis groups and filters by, so it travels as its own column
+     * rather than as a prefix inside the message. Keep these values stable: the research database
+     * accumulates them, and a renamed value reads as a new kind for every row written after the
+     * rename.
+     */
+    public static final class LogType {
+        private LogType() {
+        }
+
+        /** The framework or the device starting, stopping, rebooting, or being cleared away. */
+        public static final String LIFECYCLE = "lifecycle";
+        /** A scheduled action firing. */
+        public static final String SCHEDULER = "scheduler";
+        /** Progress of a table's upload. */
+        public static final String SYNC = "sync";
+        /** Study configuration being checked, applied, or reconciled against live settings. */
+        public static final String STUDY = "study";
+        /** Why a sensor is or is not producing data. */
+        public static final String DIAGNOSTICS = "diagnostics";
+        /** A snapshot of the device's connectivity and hardware state. */
+        public static final String CONTEXT = "context";
+        /** The kind a caller that classifies nothing gets, including plugins. */
+        public static final String EVENT = "event";
+    }
+
+    /**
+     * Records a log entry of an unclassified kind. Retained for callers outside this package —
+     * plugins reach aware_log through here.
+     */
     public static void debug(Context c, String message) {
+        debug(c, LogType.EVENT, message);
+    }
+
+    /**
+     * Records a log entry under one of the {@link LogType} kinds.
+     *
+     * Entries are kept only while the device is in a study, since their purpose is the researcher's
+     * compliance record.
+     *
+     * @param type    one of the {@link LogType} values
+     * @param message the entry itself
+     */
+    public static void debug(Context c, String type, String message) {
         //NOTE: only collect this aware_log if in a study for compliance checks
         if (!Aware.isStudy(c)) return;
 
         ContentValues log = new ContentValues();
         log.put(Aware_Provider.Aware_Log.LOG_TIMESTAMP, System.currentTimeMillis());
-        log.put(Aware_Provider.Aware_Log.LOG_DEVICE_ID, Aware.getSetting(c, Aware_Preferences.DEVICE_ID));
+        log.put(Aware_Provider.Aware_Log.LOG_DEVICE_ID, Aware.getDeviceID(c));
+        log.put(Aware_Provider.Aware_Log.LOG_TYPE, type);
         log.put(Aware_Provider.Aware_Log.LOG_MESSAGE, message);
 
         if (Aware.DEBUG) Log.d(TAG, "Aware_Log: \n" + log.toString());
@@ -665,6 +911,91 @@ public class Aware extends Service {
     }
 
     /**
+     * Fetch the cursor for the study the device is currently enrolled in, independent of
+     * any URL. Mirrors {@link #isStudy(Context)}: the most recent study row that has been
+     * joined and not yet exited. Use this (instead of {@link #getStudy(Context, String)})
+     * for quitting a study, so it still works when the WEBSERVICE_SERVER setting has drifted
+     * from the study URL (e.g. after a partial reset). Caller must close the returned Cursor.
+     *
+     * @param c
+     * @return cursor positioned at the active study row, or null/empty if not enrolled
+     */
+    public static Cursor getActiveStudy(Context c) {
+        // Restricted to rows carrying a configuration, which are the rows that define an enrolment.
+        // aware_studies also holds compliance events — a consent decision, a plugin install, a
+        // cancelled quit — and those copy double_join from the enrolment they describe, so they match
+        // "joined and not exited" too and, being newer, would win the sort. Callers here want the
+        // enrolment and its config, so the newest configuration-bearing row is what answers them.
+        return c.getContentResolver().query(
+            Aware_Provider.Aware_Studies.CONTENT_URI,
+            null,
+            Aware_Provider.Aware_Studies.STUDY_EXIT + "=0 AND "
+                    + Aware_Provider.Aware_Studies.STUDY_JOINED + ">0 AND "
+                    + Aware_Provider.Aware_Studies.STUDY_CONFIG + "!=''",
+            null,
+            Aware_Provider.Aware_Studies.STUDY_TIMESTAMP + " DESC LIMIT 1"
+        );
+    }
+
+    /**
+     * Append a compliance row to aware_studies for the currently active study, carrying a free-text
+     * {@code message}. This is the server-visible audit trail the researcher reads (same mechanism as
+     * "quit study"/"updated study" events) — used here to record consent decisions (given, declined,
+     * per-sensor enables). No-op if not currently enrolled. Caller need not hold a study cursor.
+     */
+    public static void logStudyCompliance(Context c, String message) {
+        Cursor study = getActiveStudy(c);
+        if (study != null && study.moveToFirst()) {
+            ContentValues entry = new ContentValues();
+            entry.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
+            entry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getDeviceID(c));
+            entry.put(Aware_Provider.Aware_Studies.STUDY_KEY, study.getInt(study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)));
+            entry.put(Aware_Provider.Aware_Studies.STUDY_API, study.getString(study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_API)));
+            entry.put(Aware_Provider.Aware_Studies.STUDY_URL, study.getString(study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_URL)));
+            entry.put(Aware_Provider.Aware_Studies.STUDY_PI, study.getString(study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_PI)));
+            entry.put(Aware_Provider.Aware_Studies.STUDY_JOINED, study.getLong(study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_JOINED)));
+            entry.put(Aware_Provider.Aware_Studies.STUDY_EXIT, study.getLong(study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_EXIT)));
+            entry.put(Aware_Provider.Aware_Studies.STUDY_TITLE, study.getString(study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_TITLE)));
+            entry.put(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION, study.getString(study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION)));
+            entry.put(Aware_Provider.Aware_Studies.STUDY_COMPLIANCE, message);
+            c.getContentResolver().insert(Aware_Provider.Aware_Studies.CONTENT_URI, entry);
+        }
+        if (study != null && !study.isClosed()) study.close();
+    }
+
+    /**
+     * Returns the list of studies the device has successfully joined at any point, most recent
+     * first, collapsed to one entry per distinct study. The aware_studies table keeps a row for
+     * every join and every compliance event, so this de-duplicates by study URL (falling back to
+     * study key) and keeps only the latest row per study. Intended for a "previously joined
+     * studies" history/management list.
+     *
+     * @param c
+     * @return one {@link ContentValues} per distinct joined study (all study columns), newest first
+     */
+    public static List<ContentValues> getJoinedStudies(Context c) {
+        List<ContentValues> studies = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        Cursor cursor = c.getContentResolver().query(Aware_Provider.Aware_Studies.CONTENT_URI, null,
+                Aware_Provider.Aware_Studies.STUDY_JOINED + ">0", null,
+                Aware_Provider.Aware_Studies.STUDY_TIMESTAMP + " DESC");
+        if (cursor != null) {
+            while (cursor.moveToNext()) {
+                String url = cursor.getString(cursor.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_URL));
+                String identity = (url != null && url.length() > 0)
+                        ? url
+                        : "key:" + cursor.getInt(cursor.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY));
+                if (!seen.add(identity)) continue; // already have the latest row for this study
+                ContentValues row = new ContentValues();
+                DatabaseUtils.cursorRowToContentValues(cursor, row);
+                studies.add(row);
+            }
+            cursor.close();
+        }
+        return studies;
+    }
+
+    /**
      * Gets the study config object for a given study URL
      *
      * @param c
@@ -676,15 +1007,96 @@ public class Aware extends Service {
         JSONObject studyConfig = new JSONObject();
 
         if (study != null && study.moveToFirst()) {
-            try {
-                studyConfig = new JSONObject(study.getString(
-                        study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_CONFIG)));
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
+            studyConfig = parseStudyConfig(study.getString(
+                    study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_CONFIG)));
         }
 
+        if (study != null && !study.isClosed()) study.close();
         return studyConfig;
+    }
+
+    /**
+     * Gets the config object for the currently joined study, independent of WEBSERVICE_SERVER.
+     *
+     * @param c
+     * @return JSONObject representing the active study config
+     */
+    public static JSONObject getActiveStudyConfig(Context c) {
+        Cursor study = getActiveStudy(c);
+        JSONObject studyConfig = new JSONObject();
+
+        if (study != null && study.moveToFirst()) {
+            studyConfig = parseStudyConfig(study.getString(
+                    study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_CONFIG)));
+        }
+
+        if (study != null && !study.isClosed()) study.close();
+        return studyConfig;
+    }
+
+    private static JSONObject parseStudyConfig(String config) {
+        if (config == null || config.trim().length() == 0) return new JSONObject();
+
+        try {
+            String trimmed = config.trim();
+            if (trimmed.startsWith("[")) {
+                JSONArray configs = new JSONArray(trimmed);
+                return configs.length() > 0 ? configs.getJSONObject(0) : new JSONObject();
+            }
+            return new JSONObject(trimmed);
+        } catch (JSONException e) {
+            e.printStackTrace();
+            return new JSONObject();
+        }
+    }
+
+    /**
+     * Read a numeric setting, tolerating empty/missing/invalid values. Some settings
+     * (e.g. FREQUENCY_SYNC_CONFIG) are only populated by a study config, so after
+     * {@link #reset(Context)} on study exit they can be empty; parsing them directly
+     * would throw NumberFormatException and crash the service on start.
+     */
+    public static long getSettingAsLong(Context context, String key, long defaultValue) {
+        return parseLongOrDefault(Aware.getSetting(context, key), defaultValue);
+    }
+
+    /** @see #getSettingAsLong(Context, String, long) */
+    public static int getSettingAsInt(Context context, String key, int defaultValue) {
+        return parseIntOrDefault(Aware.getSetting(context, key), defaultValue);
+    }
+
+    /** @see #getSettingAsLong(Context, String, long) */
+    public static double getSettingAsDouble(Context context, String key, double defaultValue) {
+        return parseDoubleOrDefault(Aware.getSetting(context, key), defaultValue);
+    }
+
+    /** Context-free parse core of {@link #getSettingAsLong}, split out so it's unit-testable without a Context. */
+    static long parseLongOrDefault(String raw, long defaultValue) {
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    /** Context-free parse core of {@link #getSettingAsInt}, split out so it's unit-testable without a Context. */
+    static int parseIntOrDefault(String raw, int defaultValue) {
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    /** Context-free parse core of {@link #getSettingAsDouble}, split out so it's unit-testable without a Context. */
+    static double parseDoubleOrDefault(String raw, double defaultValue) {
+        try {
+            // Unlike Integer.parseInt/Long.parseLong, Double.parseDouble(null) throws
+            // NullPointerException rather than NumberFormatException — catch both.
+            return Double.parseDouble(raw);
+        } catch (NumberFormatException | NullPointerException e) {
+            return defaultValue;
+        }
     }
 
     @Override
@@ -692,10 +1104,12 @@ public class Aware extends Service {
         super.onStartCommand(intent, flags, startId);
 
         // To track the application starting info
-        Aware.debug(getApplicationContext(),"Aware-starting");
+        Aware.debug(getApplicationContext(), LogType.LIFECYCLE, "Aware-starting");
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && PermissionChecker.checkSelfPermission(getApplicationContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE) != PermissionChecker.PERMISSION_GRANTED) {
-            return START_STICKY;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "AWARE core not starting: storage permission is missing");
+            stopSelf(startId);
+            return START_NOT_STICKY;
         }
 
         if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
@@ -714,27 +1128,60 @@ public class Aware extends Service {
             //this sets the default settings to all plugins too
             Map<String, ?> defaults = prefs.getAll();
             for (Map.Entry<String, ?> entry : defaults.entrySet()) {
+                // Skip webservice_server: the "com.aware.phone" SharedPreferences file baked in the
+                // XML placeholder ("http://api.awareframework.com/index.php") the first time
+                // setDefaultValues() ever ran on this device, and nothing ever updates that cached
+                // copy when a participant later joins a real study (Aware_Join_Study writes straight
+                // to the ContentProvider settings table, not to this SharedPreferences file). So this
+                // loop was silently refilling a real join URL with that stale placeholder every time
+                // it happened to observe the ContentProvider's copy empty — the same landmine as the
+                // explicit fallback removed below, just reached through the cached-defaults path
+                // instead. See Aware_Join_Study for how webservice_server is actually meant to be set.
+                if (entry.getKey().equals(Aware_Preferences.WEBSERVICE_SERVER)) continue;
                 if (Aware.getSetting(getApplicationContext(), entry.getKey(), "com.aware.phone").length() == 0) {
                     Aware.setSetting(getApplicationContext(), entry.getKey(), entry.getValue(), "com.aware.phone"); //default AWARE settings
                 }
             }
 
-            if (Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID).length() == 0) {
+            // getDeviceID() rather than getSetting(): it restores the UUID from the SharedPreferences
+            // mirror when the settings row is gone, so this only mints an identity for an install that
+            // has never had one. Reading the settings table alone made a lost row indistinguishable
+            // from a first run, and minting here then split one participant across two device_ids --
+            // the rows already uploaded under the old UUID can no longer be tied to the new one.
+            if (Aware.getDeviceID(getApplicationContext()).length() == 0) {
                 UUID uuid = UUID.randomUUID();
                 Aware.setSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID, uuid.toString(), "com.aware.phone");
             }
 
-            if (Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER).length() == 0) {
-                Aware.setSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER, "https://api.awareframework.com/index.php");
+            // Self-heal webservice_server from aware_studies — the authoritative record of what was
+            // actually joined — instead of ever defaulting it to a placeholder. This setting doubles
+            // as the join URL Aware.getStudy()/isStudy() match against aware_studies.study_url, so
+            // it must never silently become a demo-server placeholder (that used to happen via a
+            // couple of "if empty, default to..." fallbacks, all removed) or sit corrupted from that
+            // historical bug waiting on a manual rejoin/DB fix. If it doesn't match the enrolled
+            // study's real URL, correct it here, every service start.
+            if (isStudy(getApplicationContext())) {
+                Cursor activeStudy = getActiveStudy(getApplicationContext());
+                if (activeStudy != null && activeStudy.moveToFirst()) {
+                    String realUrl = activeStudy.getString(activeStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_URL));
+                    String currentUrl = Aware.getSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER);
+                    if (realUrl != null && realUrl.length() > 0 && !realUrl.equals(currentUrl)) {
+                        Aware.setSetting(getApplicationContext(), Aware_Preferences.WEBSERVICE_SERVER, realUrl);
+                    }
+                }
+                if (activeStudy != null && !activeStudy.isClosed()) activeStudy.close();
             }
-
             DEBUG = Aware.getSetting(this, Aware_Preferences.DEBUG_FLAG).equals("true");
             TAG = Aware.getSetting(this, Aware_Preferences.DEBUG_TAG).length() > 0 ? Aware.getSetting(this, Aware_Preferences.DEBUG_TAG) : TAG;
 
             get_device_info();
 
             if (Aware.getSetting(getApplicationContext(), Aware_Preferences.AWARE_DONATE_USAGE).equals("true")) {
-                new AsyncPing().execute();
+                long now = System.currentTimeMillis();
+                if (now - lastDonationPingAt >= DONATION_PING_INTERVAL_MS
+                        && donationPingInFlight.compareAndSet(false, true)) {
+                    new AsyncPing().execute();
+                }
             }
 
             //only the client and self-contained apps need to run the keep alive. Plugins are handled by them.
@@ -798,11 +1245,6 @@ public class Aware extends Service {
                     startPlugins(getApplicationContext());
                 }
 
-                if (intent.getAction().equalsIgnoreCase(ACTION_AWARE_KEEP_ALIVE)) {
-                    startAWARE(getApplicationContext());
-                    startPlugins(getApplicationContext());
-                }
-
             } else {
                 startAWARE(getApplicationContext());
                 startPlugins(getApplicationContext());
@@ -811,20 +1253,49 @@ public class Aware extends Service {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Aware_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Aware_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency/3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Aware_Provider.getAuthority(this))
                         .setExtras(new Bundle()).build();
                 ContentResolver.requestSync(request);
 
+                // Set scheduler for syncing collected data
+                //
+                // The periodic sync requested above is a request the platform schedules at its own
+                // discretion, batching it into a maintenance window that a study's cadence has no
+                // say in. AWARE's own scheduler runs on the interval it is given, and the broadcast
+                // it sends reaches every running sensor and plugin, each of which asks for an
+                // expedited sync of the authority it owns. That is what puts a study's upload
+                // frequency in charge of when data leaves the phone.
+                try {
+                    Scheduler.Schedule syncData = Scheduler.getSchedule(this, Aware.SCHEDULE_SYNC_DATA);
+                    long syncFrequency = getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30);
+
+                    if (syncData != null && syncData.getInterval() != syncFrequency) {
+                        syncData.setInterval(syncFrequency);
+                        Scheduler.saveSchedule(this, syncData);
+                    }
+                    if (syncData == null) {
+                        syncData = new Scheduler.Schedule(Aware.SCHEDULE_SYNC_DATA);
+                        syncData.setInterval(syncFrequency)
+                                .setActionType(Scheduler.ACTION_TYPE_BROADCAST)
+                                .setActionIntentAction(Aware.ACTION_AWARE_SYNC_DATA);
+
+                        Scheduler.saveSchedule(this, syncData);
+                    }
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+
                 // Set scheduler for syncing config data
                 try {
                     Scheduler.Schedule syncConfig = Scheduler.getSchedule(this, Aware.SCHEDULE_SYNC_CONFIG);
-                    frequency = Long.parseLong(getSetting(this, Aware_Preferences.FREQUENCY_SYNC_CONFIG));
+                    frequency = getSettingAsLong(this, Aware_Preferences.FREQUENCY_SYNC_CONFIG, 30);
 
                     if (syncConfig != null && syncConfig.getInterval() != frequency) {
                         syncConfig.setInterval(frequency);
+                        Scheduler.saveSchedule(this, syncConfig);
                     }
                     if (syncConfig == null) {
                         syncConfig = new Scheduler.Schedule(Aware.SCHEDULE_SYNC_CONFIG);
@@ -1174,6 +1645,82 @@ public class Aware extends Service {
     }
 
     /**
+     * The device UUID to stamp on rows, recovered from the SharedPreferences mirror when the
+     * aware_settings copy is missing.
+     *
+     * Every row that is uploaded carries this, so read it here rather than through
+     * getSetting(DEVICE_ID): getSetting() returns the empty string for a missing setting exactly as it
+     * does for an empty one, and the column is declared "text default ''", so an unresolved UUID is
+     * stored and uploaded silently instead of failing. This resolves the settings table against the
+     * mirror and repairs whichever copy is behind.
+     *
+     * Returns the empty string only when neither copy holds a UUID -- an install whose
+     * Aware.onCreate() has not yet minted one, where there is genuinely no identity to stamp.
+     */
+    public static String getDeviceID(Context context) {
+        SharedPreferences identity = context.getSharedPreferences(
+                DeviceId.MIRROR_PREFERENCES, Context.MODE_PRIVATE);
+
+        DeviceId.Resolution resolution = DeviceId.resolve(
+                getSetting(context, Aware_Preferences.DEVICE_ID),
+                identity.getString(DeviceId.MIRROR_KEY, ""));
+
+        if (resolution.shouldHealMirror())
+            identity.edit().putString(DeviceId.MIRROR_KEY, resolution.getDeviceId()).apply();
+
+        // setSetting() bails out when the settings table already holds a UUID, so this only ever
+        // restores a lost row and never overwrites a live identity with the mirror's copy.
+        if (resolution.shouldHealSettings()) {
+            Log.w(TAG, "device_id was missing from settings; restored from the identity mirror");
+            setSetting(context, Aware_Preferences.DEVICE_ID, resolution.getDeviceId(), "com.aware.phone");
+        }
+
+        return resolution.getDeviceId();
+    }
+
+    /**
+     * Keeps the SharedPreferences mirror in step whenever a UUID is persisted, so it is already in
+     * place the first time a settings wipe needs it. Called only on the paths that actually store the
+     * value, so a rejected write cannot mirror a UUID the settings table never accepted.
+     */
+    private static void mirrorDeviceID(Context context, String key, Object value) {
+        if (!key.equals(Aware_Preferences.DEVICE_ID)) return;
+
+        String device_id = DeviceId.trimToEmpty(value == null ? "" : value.toString());
+        if (device_id.isEmpty()) return;
+
+        context.getSharedPreferences(DeviceId.MIRROR_PREFERENCES, Context.MODE_PRIVATE)
+                .edit().putString(DeviceId.MIRROR_KEY, device_id).apply();
+    }
+
+    /** Keeps the participant's alternative device name in the uploaded device profile. */
+    private static void updateDeviceLabel(Context context, String key, Object value) {
+        if (!key.equals(Aware_Preferences.DEVICE_LABEL)) return;
+
+        String deviceId = getSetting(context, Aware_Preferences.DEVICE_ID);
+        if (deviceId.length() == 0) return;
+
+        String label = value == null ? "" : value.toString();
+        Cursor device = context.getContentResolver().query(Aware_Device.CONTENT_URI,
+                new String[]{Aware_Device.LABEL}, Aware_Device.DEVICE_ID + "=?",
+                new String[]{deviceId}, null);
+        String stored = null;
+        if (device != null && device.moveToFirst()) {
+            int labelIndex = device.getColumnIndex(Aware_Device.LABEL);
+            stored = labelIndex < 0 ? null : device.getString(labelIndex);
+        }
+        if (device != null && !device.isClosed()) device.close();
+        if (label.equals(stored)) return;
+
+        ContentValues update = new ContentValues();
+        update.put(Aware_Device.LABEL, label);
+        // Upload paging is timestamp-based, so a label-only change must advance it too.
+        update.put(Aware_Device.TIMESTAMP, System.currentTimeMillis());
+        context.getContentResolver().update(Aware_Device.CONTENT_URI, update,
+                Aware_Device.DEVICE_ID + "=?", new String[]{deviceId});
+    }
+
+    /**
      * Insert / Update settings of the framework
      *
      * @param key
@@ -1219,11 +1766,7 @@ public class Aware extends Service {
             return;
         }
 
-        if (key.equals(Aware_Preferences.DEVICE_LABEL) && ((String) value).length() > 0) {
-            ContentValues newLabel = new ContentValues();
-            newLabel.put(Aware_Provider.Aware_Device.LABEL, (String) value);
-            context.getApplicationContext().getContentResolver().update(Aware_Provider.Aware_Device.CONTENT_URI, newLabel, Aware_Provider.Aware_Device.DEVICE_ID + " LIKE '" + Aware.getSetting(context, Aware_Preferences.DEVICE_ID) + "'", null);
-        }
+        mirrorDeviceID(context, key, value);
 
         ContentValues setting = new ContentValues();
         setting.put(Aware_Settings.SETTING_KEY, key);
@@ -1246,7 +1789,7 @@ public class Aware extends Service {
                     if (Aware.isStudy(context)) {
                         ContentValues log = new ContentValues();
                         log.put(Aware_Provider.Aware_Log.LOG_TIMESTAMP, System.currentTimeMillis());
-                        log.put(Aware_Provider.Aware_Log.LOG_DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                        log.put(Aware_Provider.Aware_Log.LOG_DEVICE_ID, Aware.getDeviceID(context));
                         log.put(Aware_Provider.Aware_Log.LOG_MESSAGE, sensor_track_mes);
                         context.getContentResolver().insert(Aware_Provider.Aware_Log.CONTENT_URI, log);
                     }
@@ -1268,6 +1811,7 @@ public class Aware extends Service {
             }
         }
         if (qry != null && !qry.isClosed()) qry.close();
+        updateDeviceLabel(context, key, value);
     }
 
     /**
@@ -1287,11 +1831,7 @@ public class Aware extends Service {
             return;
         }
 
-        if (key.equals(Aware_Preferences.DEVICE_LABEL) && ((String) value).length() > 0) {
-            ContentValues newLabel = new ContentValues();
-            newLabel.put(Aware_Provider.Aware_Device.LABEL, (String) value);
-            context.getContentResolver().update(Aware_Provider.Aware_Device.CONTENT_URI, newLabel, Aware_Provider.Aware_Device.DEVICE_ID + " LIKE '" + Aware.getSetting(context, Aware_Preferences.DEVICE_ID) + "'", null);
-        }
+        mirrorDeviceID(context, key, value);
 
         ContentValues setting = new ContentValues();
         setting.put(Aware_Settings.SETTING_KEY, key);
@@ -1312,7 +1852,7 @@ public class Aware extends Service {
                     if (Aware.isStudy(context)) {
                         ContentValues log = new ContentValues();
                         log.put(Aware_Provider.Aware_Log.LOG_TIMESTAMP, System.currentTimeMillis());
-                        log.put(Aware_Provider.Aware_Log.LOG_DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                        log.put(Aware_Provider.Aware_Log.LOG_DEVICE_ID, Aware.getDeviceID(context));
                         log.put(Aware_Provider.Aware_Log.LOG_MESSAGE, sensor_track_mes);
                         context.getContentResolver().insert(Aware_Provider.Aware_Log.CONTENT_URI, log);
                     }
@@ -1335,6 +1875,7 @@ public class Aware extends Service {
             }
         }
         if (qry != null && !qry.isClosed()) qry.close();
+        updateDeviceLabel(context, key, value);
     }
 
     /**
@@ -1557,6 +2098,7 @@ public class Aware extends Service {
         if (config_changed) {
             ContentValues newCfg = new ContentValues();
             newCfg.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, localConfig.toString());
+            newCfg.put(Aware_Provider.Aware_Studies.STUDY_UPDATED, System.currentTimeMillis());
             c.getContentResolver().update(Aware_Provider.Aware_Studies.CONTENT_URI, newCfg, Aware_Provider.Aware_Studies._ID + "=" + study_id, null);
 
             Intent aware = new Intent(c, Aware.class);
@@ -1743,8 +2285,9 @@ public class Aware extends Service {
                 if (protocol.equals("https")) {
                     SSLManager.handleUrl(getApplicationContext(), full_url, true);
 
-                    while(!SSLManager.hasCertificate(getApplicationContext(), study_uri.getHost())) {
-                        //wait until we have the certificate downloaded
+                    if (!SSLManager.hasCertificate(getApplicationContext(), study_uri.getHost())) {
+                        Log.e(TAG, "Unable to obtain an SSL certificate for " + study_uri.getHost());
+                        return;
                     }
 
                     // TODO RIO: Replace GET to webserver a GET to study config URL
@@ -1768,7 +2311,7 @@ public class Aware extends Service {
 
                         //Request study settings
                         Hashtable<String, String> data = new Hashtable<>();
-                        data.put(Aware_Preferences.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                        data.put(Aware_Preferences.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                         data.put("platform", "android");
                         try {
                             PackageInfo package_info = getApplicationContext().getPackageManager().getPackageInfo(getApplicationContext().getPackageName(), 0);
@@ -1800,7 +2343,7 @@ public class Aware extends Service {
                         JSONArray study_config = new JSONArray(answer);
 
                         if (DEBUG)
-                            Log.d(TAG, "Study config: " + study_config.toString(5));
+                            Log.d(TAG, LogRedactor.redact("Study config: " + study_config.toString(5)));
 
                         if (study_config.getJSONObject(0).has("message")) {
                             Toast.makeText(getApplicationContext(), study_config.getJSONObject(0).getString("message"), Toast.LENGTH_LONG).show();
@@ -1809,11 +2352,11 @@ public class Aware extends Service {
 
                         Cursor dbStudy = Aware.getStudy(getApplicationContext(), full_url);
                         if (Aware.DEBUG)
-                            Log.d(Aware.TAG, DatabaseUtils.dumpCursorToString(dbStudy));
+                            Log.d(Aware.TAG, LogRedactor.redact(DatabaseUtils.dumpCursorToString(dbStudy)));
 
                         if (dbStudy == null || !dbStudy.moveToFirst()) {
                             ContentValues studyData = new ContentValues();
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                            studyData.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                             studyData.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
                             studyData.put(Aware_Provider.Aware_Studies.STUDY_JOINED, System.currentTimeMillis());
                             studyData.put(Aware_Provider.Aware_Studies.STUDY_KEY, study_id);
@@ -1827,11 +2370,11 @@ public class Aware extends Service {
                             getContentResolver().insert(Aware_Provider.Aware_Studies.CONTENT_URI, studyData);
 
                             if (Aware.DEBUG)
-                                Log.d(Aware.TAG, "New study data: " + studyData.toString());
+                                Log.d(Aware.TAG, LogRedactor.redact("New study data: " + studyData.toString()));
 
                         } else {
                             ContentValues studyData = new ContentValues();
-                            studyData.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                            studyData.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                             studyData.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
                             studyData.put(Aware_Provider.Aware_Studies.STUDY_JOINED, System.currentTimeMillis());
                             studyData.put(Aware_Provider.Aware_Studies.STUDY_EXIT, 0);
@@ -1846,7 +2389,7 @@ public class Aware extends Service {
                             getContentResolver().insert(Aware_Provider.Aware_Studies.CONTENT_URI, studyData);
 
                             if (Aware.DEBUG) {
-                                Log.d(Aware.TAG, "Rejoined study data: " + studyData.toString());
+                                Log.d(Aware.TAG, LogRedactor.redact("Rejoined study data: " + studyData.toString()));
                             }
                         }
 
@@ -1874,13 +2417,21 @@ public class Aware extends Service {
                             }
                         }
 
+                        // Programmatic join with no consent UI: hold every consent-requiring sensor
+                        // off and persist it to the declined set, so a sensor needing a runtime
+                        // permission or the Accessibility Service isn't silently enabled. Base
+                        // (permission-free) sensors apply as the config specifies.
+                        Set<String> declined = StudyUtils.holdConsentSensorsUnlessAgreed(getApplicationContext(), study_config);
+
                         //Set the sensors' settings first
                         for (int i = 0; i < sensors.length(); i++) {
                             try {
                                 JSONObject sensor_config = sensors.getJSONObject(i);
+                                String setting = sensor_config.getString("setting");
                                 String package_name = "com.aware.phone";
                                 if (getApplicationContext().getResources().getBoolean(R.bool.standalone)) package_name = getApplicationContext().getPackageName();
-                                Aware.setSetting(getApplicationContext(), sensor_config.getString("setting"), sensor_config.get("value"), package_name);
+                                Object value = declined.contains(setting) ? Boolean.FALSE : sensor_config.get("value");
+                                Aware.setSetting(getApplicationContext(), setting, value, package_name);
                             } catch (JSONException e) {
                                 e.printStackTrace();
                             }
@@ -1961,12 +2512,60 @@ public class Aware extends Service {
         }
     }
 
-    public static void reset(Context context) {
-        String device_id = Aware.getSetting(context, Aware_Preferences.DEVICE_ID);
-        String device_label = Aware.getSetting(context, Aware_Preferences.DEVICE_LABEL);
+    /**
+     * The settings reset() leaves in place, in the order the delete below binds them. Each one is also
+     * captured and re-applied further down, which covers the case of a key that was already absent
+     * when reset() started.
+     */
+    private static final String[] PRESERVED_ACROSS_RESET = new String[]{
+            Aware_Preferences.DEVICE_ID,
+            Aware_Preferences.DEVICE_LABEL,
+            Aware_Preferences.WEBSERVICE_SERVER,
+            Aware_Preferences.FREQUENCY_WEBSERVICE,
+            Aware_Preferences.PENDING_STUDY_UPDATE_NOTICE,
+    };
 
-        //Remove all settings
-        context.getContentResolver().delete(Aware_Settings.CONTENT_URI, null, null);
+    /**
+     * Deletes every setting except PRESERVED_ACROSS_RESET, re-applies the defaults from
+     * aware_preferences.xml, and re-writes the preserved values.
+     *
+     * Excluding those keys from the delete is what keeps them readable throughout: sensors and plugins
+     * insert rows and start services on their own threads the whole time reset() runs, and a read
+     * landing between a delete-everything and its restore gets the empty string. That produced rows
+     * stamped with an empty device_id, and crashed callers that parse FREQUENCY_WEBSERVICE with no
+     * validation (observed in ESM.onStartCommand and the ambient_noise plugin's AudioAnalyser).
+     *
+     * synchronized: every ACTION_AWARE_SYNC_CONFIG trigger (scheduled poll, manual button, onResume)
+     * spawns its own thread and can end up here concurrently, directly or via applySettings(). It
+     * serializes reset() against itself only -- it cannot hold off the sensor threads above, which is
+     * why the gap is closed by not deleting rather than by locking.
+     */
+    public static synchronized void reset(Context context) {
+        String device_id = Aware.getDeviceID(context);
+        String device_label = Aware.getSetting(context, Aware_Preferences.DEVICE_LABEL);
+        // Preserved by the delete below, same as device_id/device_label: this is the join URL
+        // Aware.getStudy() matches against aware_studies.study_url. Without this, it comes back
+        // empty and the next service start refills it with a hardcoded placeholder, permanently
+        // breaking study lookup even though the aware_studies row is still healthy.
+        String webservice_server = Aware.getSetting(context, Aware_Preferences.WEBSERVICE_SERVER);
+        // Preserved by the delete below: not part of aware_preferences.xml's defaults, so it would
+        // otherwise come back empty until the current sync's processSensorSettings() re-applies it a
+        // few lines later in applySettings(). This is the shared "how often to sync data" interval —
+        // nearly every sensor's onStartCommand() does Long.parseLong(getSetting(FREQUENCY_WEBSERVICE))
+        // with no validation to schedule its own periodic data sync (the real JDBC upload path, not
+        // just the legacy webservice one). If a sensor happens to (re)start on a different thread
+        // during that narrow window, it crashes on an empty string — observed for real in
+        // ESM.onStartCommand and the ambient_noise plugin's AudioAnalyser.
+        String frequency_webservice = Aware.getSetting(context, Aware_Preferences.FREQUENCY_WEBSERVICE);
+        // Preserved by the delete below: a not-yet-shown "study updated" notice for the participant
+        // (StudyUtils.syncStudyConfig sets this, Aware_Client shows it and clears it once seen). Also
+        // not part of aware_preferences.xml's defaults, so without this it would be silently dropped
+        // if a reset() races a pending notice — the participant would simply never see that update.
+        String pending_study_update_notice = Aware.getSetting(context, Aware_Preferences.PENDING_STUDY_UPDATE_NOTICE);
+
+        //Remove all settings except the ones captured above, which stay in place throughout
+        context.getContentResolver().delete(Aware_Settings.CONTENT_URI,
+                Aware_Settings.SETTING_KEY + " NOT IN (?,?,?,?,?)", PRESERVED_ACROSS_RESET);
 
         //Remove all schedulers
         context.getContentResolver().delete(Scheduler_Provider.Scheduler_Data.CONTENT_URI, null, null);
@@ -1984,10 +2583,9 @@ public class Aware extends Service {
         //Keep previous AWARE Device ID and label
         Aware.setSetting(context, Aware_Preferences.DEVICE_ID, device_id, "com.aware.phone");
         Aware.setSetting(context, Aware_Preferences.DEVICE_LABEL, device_label, "com.aware.phone");
-
-        ContentValues update_label = new ContentValues();
-        update_label.put(Aware_Device.LABEL, device_label);
-        context.getContentResolver().update(Aware_Device.CONTENT_URI, update_label, Aware_Device.DEVICE_ID + " LIKE '" + device_id + "'", null);
+        Aware.setSetting(context, Aware_Preferences.WEBSERVICE_SERVER, webservice_server, "com.aware.phone");
+        Aware.setSetting(context, Aware_Preferences.FREQUENCY_WEBSERVICE, frequency_webservice, "com.aware.phone");
+        Aware.setSetting(context, Aware_Preferences.PENDING_STUDY_UPDATE_NOTICE, pending_study_update_notice, "com.aware.phone");
 
         //Turn off all active plugins
         ArrayList<String> active_plugins = new ArrayList<>();
@@ -2067,13 +2665,12 @@ public class Aware extends Service {
                                     //Log the updated plugin
                                     if (package_name.equalsIgnoreCase(packageName)) {
                                         ContentValues complianceEntry = new ContentValues();
-                                        complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                                        complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getDeviceID(context));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_KEY, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_API, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_API)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_URL, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_URL)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_PI, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_PI)));
-                                        complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_CONFIG)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_JOINED, studyInfo.getLong(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_JOINED)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TITLE, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_TITLE)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION)));
@@ -2157,13 +2754,12 @@ public class Aware extends Service {
                                     //Participant installed necessary plugin
                                     if (package_name.equalsIgnoreCase(packageName)) {
                                         ContentValues complianceEntry = new ContentValues();
-                                        complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                                        complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getDeviceID(context));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_KEY, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_API, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_API)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_URL, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_URL)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_PI, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_PI)));
-                                        complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_CONFIG)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_JOINED, studyInfo.getLong(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_JOINED)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TITLE, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_TITLE)));
                                         complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION)));
@@ -2224,13 +2820,12 @@ public class Aware extends Service {
                                 //Participant is breaking compliance, just uninstalled a plugin we have as needed for the study!
                                 if (package_name.equalsIgnoreCase(packageName)) {
                                     ContentValues complianceEntry = new ContentValues();
-                                    complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                                    complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getDeviceID(context));
                                     complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
                                     complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_KEY, studyInfo.getInt(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)));
                                     complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_API, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_API)));
                                     complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_URL, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_URL)));
                                     complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_PI, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_PI)));
-                                    complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_CONFIG)));
                                     complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_JOINED, studyInfo.getLong(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_JOINED)));
                                     complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TITLE, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_TITLE)));
                                     complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION, studyInfo.getString(studyInfo.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION)));
@@ -2268,7 +2863,108 @@ public class Aware extends Service {
      * @author denzil
      */
     public static final Aware_Broadcaster aware_BR = new Aware_Broadcaster();
+    // Single-threaded: syncStudyConfig() -> applySettings() calls Aware.reset() (wipe all settings)
+    // and then writes the new config back non-atomically over several steps. Only reset() itself is
+    // synchronized, so two overlapping ACTION_AWARE_SYNC_CONFIG triggers (scheduled poll, onResume(),
+    // repeated manual button taps — none of which are mutually exclusive) used to each run on their
+    // own ad-hoc Thread, and a second thread's reset() could wipe settings a first thread had only
+    // partially finished re-applying, corrupting the result (observed for real: study config kept
+    // re-appearing as "updated" every sync, and device_id drifted to a freshly-minted UUID mid-sync).
+    // Routing every sync through one single-thread executor makes them run strictly one at a time.
+    private static final java.util.concurrent.ExecutorService syncConfigExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
+    private static final Object syncConfigLock = new Object();
+    private static boolean syncConfigDrainScheduled;
+    private static boolean syncConfigPending;
+    private static boolean syncConfigPendingToast;
+    private static boolean syncConfigPendingManual;
+    private static boolean syncConfigPendingApproved;
+
+    /**
+     * Runs only one configuration sync at a time. If another request arrives while it is running,
+     * schedules one additional sync after the current one finishes.
+     * A single-thread executor alone still accepts an unbounded queue, which allowed alarms,
+     * UI taps and config-triggered service restarts to accumulate hundreds of stale requests.
+     */
+    private static void enqueueStudyConfigSync(
+            Context context, boolean showToast, boolean manual, boolean approved) {
+        final Context appContext = context.getApplicationContext();
+        synchronized (syncConfigLock) {
+            syncConfigPending = true;
+            syncConfigPendingToast |= showToast;
+            syncConfigPendingManual |= manual;
+            syncConfigPendingApproved |= approved;
+            if (syncConfigDrainScheduled) return;
+            syncConfigDrainScheduled = true;
+        }
+
+        syncConfigExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    final boolean toast;
+                    final boolean manual;
+                    final boolean approved;
+                    synchronized (syncConfigLock) {
+                        if (!syncConfigPending) {
+                            syncConfigDrainScheduled = false;
+                            return;
+                        }
+                        toast = syncConfigPendingToast;
+                        manual = syncConfigPendingManual;
+                        approved = syncConfigPendingApproved;
+                        syncConfigPending = false;
+                        syncConfigPendingToast = false;
+                        syncConfigPendingManual = false;
+                        syncConfigPendingApproved = false;
+                    }
+                    try {
+                        StudyUtils.syncStudyConfig(appContext, toast, manual, approved);
+                    } catch (RuntimeException e) {
+                        Log.e(TAG, "Study config sync failed", e);
+                    }
+                }
+            }
+        });
+    }
+
     public static class Aware_Broadcaster extends BroadcastReceiver {
+        /**
+         * Ask every enabled AWARE sync adapter to upload now.
+         *
+         * Android clamps periodic ContentResolver syncs to a platform-defined
+         * minimum (commonly fifteen minutes), so the study's shorter
+         * frequency is delivered by AWARE's own scheduler.  Discovering the
+         * adapters from ContentResolver keeps this central dispatch complete
+         * when sensors are added and does not depend on each sensor service's
+         * process-local broadcast receiver still being registered.
+         */
+        static void requestEnabledSyncs(Context context) {
+            Account account = Aware.getAWAREAccount(context);
+            Bundle sync = new Bundle();
+            sync.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
+            sync.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
+
+            Set<String> requestedAuthorities = new HashSet<>();
+            for (SyncAdapterType adapter : ContentResolver.getSyncAdapterTypes()) {
+                if (!account.type.equals(adapter.accountType)) continue;
+
+                String authority = adapter.authority;
+                if (authority == null || authority.length() == 0) continue;
+                if (ContentResolver.getIsSyncable(account, authority) <= 0) continue;
+                if (!ContentResolver.getSyncAutomatically(account, authority)) continue;
+
+                if (requestedAuthorities.add(authority)) {
+                    ContentResolver.requestSync(account, authority, sync);
+                }
+            }
+
+            if (Aware.DEBUG) {
+                Log.d(TAG, "Requested immediate sync for " + requestedAuthorities.size()
+                        + " enabled AWARE authorities");
+            }
+        }
+
         @Override
         public void onReceive(Context context, Intent intent) {
 //            String authority = Battery_Provider.getAuthority(context.getApplicationContext());
@@ -2283,21 +2979,13 @@ public class Aware extends Service {
                 Aware.reset(context);
             }
             if (intent.getAction().equals(Aware.ACTION_AWARE_SYNC_DATA)) {
-
-                Bundle sync = new Bundle();
-                sync.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
-                sync.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
-
-                ContentResolver.requestSync(Aware.getAWAREAccount(context), Aware_Provider.getAuthority(context), sync);
+                requestEnabledSyncs(context);
             }
             if (intent.getAction().equals(Aware.ACTION_AWARE_SYNC_CONFIG) && isStudy(context)) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Boolean showToast = intent.getBooleanExtra(Aware.SYNC_CONFIG_EXTRA_TOAST, false);
-                        StudyUtils.syncStudyConfig(context, showToast);
-                    }
-                }).start();
+                final boolean showToast = intent.getBooleanExtra(Aware.SYNC_CONFIG_EXTRA_TOAST, false);
+                final boolean manual = intent.getBooleanExtra(Aware.SYNC_CONFIG_EXTRA_MANUAL, false);
+                final boolean approved = intent.getBooleanExtra(Aware.SYNC_CONFIG_EXTRA_APPROVED, false);
+                enqueueStudyConfigSync(context, showToast, manual, approved);
             }
         }
     }
@@ -2342,7 +3030,7 @@ public class Aware extends Service {
                     Bundle extras = batt.getExtras();
                     if (extras != null) {
                         rowData.put(Battery_Provider.Battery_Data.TIMESTAMP, System.currentTimeMillis());
-                        rowData.put(Battery_Provider.Battery_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                        rowData.put(Battery_Provider.Battery_Data.DEVICE_ID, Aware.getDeviceID(context));
                         rowData.put(Battery_Provider.Battery_Data.LEVEL, extras.getInt(BatteryManager.EXTRA_LEVEL));
                         rowData.put(Battery_Provider.Battery_Data.SCALE, extras.getInt(BatteryManager.EXTRA_SCALE));
                         rowData.put(Battery_Provider.Battery_Data.VOLTAGE, extras.getInt(BatteryManager.EXTRA_VOLTAGE));
@@ -2359,7 +3047,7 @@ public class Aware extends Service {
                         }
                     }
                     if (intent.getAction().equalsIgnoreCase(Intent.ACTION_BOOT_COMPLETED)) {
-                        Aware.debug(context, "phone: on");
+                        Aware.debug(context, LogType.LIFECYCLE, "phone: on");
                         rowData.put(Battery_Provider.Battery_Data.STATUS, Battery.STATUS_PHONE_BOOTED);
 
                         Intent aware = new Intent(context, Aware.class);
@@ -2369,11 +3057,11 @@ public class Aware extends Service {
                             context.sendBroadcast(new Intent(Aware.ACTION_AWARE_PRIORITY_FOREGROUND));
                     }
                     if (intent.getAction().equalsIgnoreCase(Intent.ACTION_SHUTDOWN)) {
-                        Aware.debug(context, "phone: off");
+                        Aware.debug(context, LogType.LIFECYCLE, "phone: off");
                         rowData.put(Battery_Provider.Battery_Data.STATUS, Battery.STATUS_PHONE_SHUTDOWN);
                     }
                     if (intent.getAction().equalsIgnoreCase(Intent.ACTION_REBOOT)) {
-                        Aware.debug(context, "phone: reboot");
+                        Aware.debug(context, LogType.LIFECYCLE, "phone: reboot");
                         rowData.put(Battery_Provider.Battery_Data.STATUS, Battery.STATUS_PHONE_REBOOT);
                     }
                     if (intent.getAction().equalsIgnoreCase(Intent.ACTION_BOOT_COMPLETED)
@@ -2454,10 +3142,21 @@ public class Aware extends Service {
             complianceStatus.put("location_gps", locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER));
             complianceStatus.put("location_network", locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER));
 
-            Aware.debug(context, complianceStatus.toString());
+            Aware.debug(context, LogType.CONTEXT, complianceStatus.toString());
 
         } catch (JSONException e) {
             e.printStackTrace();
+        }
+
+        // Log why any study-enabled sensor can't actually collect on this device — same aware_log
+        // sink as the compliance line just above, so it reaches the researcher on the existing
+        // ~SCHEDULE_STUDY_COMPLIANCE cadence without any new sync path or server-side schema.
+        if (isStudy(context)) {
+            try {
+                SensorDiagnostics.logActiveStudySensorStatus(context);
+            } catch (Exception e) {
+                Log.e(TAG, "Error logging sensor diagnostics: " + e.getMessage());
+            }
         }
     }
 
@@ -2465,6 +3164,11 @@ public class Aware extends Service {
      * Start core and active services
      */
     public static void startAWARE(Context context) {
+
+        // Keep grouped participant consent authoritative before any sensor service is evaluated.
+        // This also migrates studies joined before installation events were tied to Applications
+        // consent, preventing package monitoring from remaining active after that consent was denied.
+        StudyUtils.enforceGroupedConsent(context);
 
         startScheduler(context);
 
@@ -2717,10 +3421,10 @@ public class Aware extends Service {
         // Handle based on whether it's user-initiated or system-initiated closure
         if (isFinishing) {
             // User initiated closure
-            Aware.debug(context, "AWARE interface cleaned from the array of frequently used apps");
+            Aware.debug(context, LogType.LIFECYCLE, "AWARE interface cleaned from the array of frequently used apps");
         } else {
             // System-initiated closure
-            Aware.debug(context, "AWARE interface cleaned by smartphone system");
+            Aware.debug(context, LogType.LIFECYCLE, "AWARE interface cleaned by smartphone system");
         }
     }
 

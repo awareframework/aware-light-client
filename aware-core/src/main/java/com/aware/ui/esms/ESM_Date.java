@@ -20,9 +20,9 @@ import com.aware.Aware;
 import com.aware.ESM;
 import com.aware.R;
 import com.aware.providers.ESM_Provider;
+import com.aware.utils.UtcTime;
 import org.json.JSONException;
 
-import java.text.SimpleDateFormat;
 import java.util.Calendar;
 
 /**
@@ -129,11 +129,9 @@ public class ESM_Date extends ESM_Question {
                         if (getExpirationThreshold() > 0 && expire_monitor != null)
                             expire_monitor.cancel(true);
 
-                        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd Z");
-
                         ContentValues rowData = new ContentValues();
                         rowData.put(ESM_Provider.ESM_Data.ANSWER_TIMESTAMP, System.currentTimeMillis());
-                        rowData.put(ESM_Provider.ESM_Data.ANSWER, dateFormat.format(datePicked.getTime()));
+                        rowData.put(ESM_Provider.ESM_Data.ANSWER, UtcTime.pickedDate(datePicked));
                         rowData.put(ESM_Provider.ESM_Data.STATUS, ESM.STATUS_ANSWERED);
 
                         getActivity().getContentResolver().update(ESM_Provider.ESM_Data.CONTENT_URI, rowData, ESM_Provider.ESM_Data._ID + "=" + getID(), null);

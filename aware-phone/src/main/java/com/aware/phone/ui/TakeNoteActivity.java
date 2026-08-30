@@ -88,7 +88,7 @@ public class TakeNoteActivity extends AppCompatActivity {
         // Prepare the note data
         ContentValues values = new ContentValues();
         values.put("timestamp", System.currentTimeMillis());
-        values.put("device_id", Aware.getSetting(this, Aware_Preferences.DEVICE_ID));
+        values.put("device_id", Aware.getDeviceID(this));
         values.put("note", noteText);
 
         // Insert the note using the content provider

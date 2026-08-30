@@ -1,19 +1,18 @@
 //shared with all modules
 buildscript {
     ext {
+        // ion_libs, google_libs and aware_libs removed: unused (see build.gradle at repo root for
+        // the same cleanup). Note this file is currently not reached by any included module in
+        // settings.gradle — see the plugin build.gradle fix note below.
         mqtt_libs = '1.2.1'
-        ion_libs = "2.+"
-        google_libs = "17.0.0"
-        version_code = (System.getenv("VERSION_CODE") ?: "3").toInteger()
-        version_readable = System.getenv("VERSION_NAME") ?: ("4.7." + version_code + ".beta")
+        version_code = (System.getenv("VERSION_CODE") ?: "1").toInteger()
+        version_readable = System.getenv("VERSION_NAME") ?: ("4.8." + version_code + ".beta")
         compile_sdk = 28
         target_sdk = 28
         minimum_sdk = 24
         build_tools = "28.0.3"
-        aware_libs = "master-SNAPSHOT"
         kotlin_version = "1.3.41"
         build_gradle = "3.4.2"
-//        anko_version = "0.10.8"
     }
 
     repositories {

@@ -131,7 +131,7 @@ public class Telephony extends Aware_Sensor {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Telephony_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Telephony_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Telephony_Provider.getAuthority(this))
@@ -186,7 +186,7 @@ public class Telephony extends Aware_Sensor {
 
             if (lastSignalStrength == null) return;
 
-            String device_id = Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID);
+            String device_id = Aware.getDeviceID(getApplicationContext());
 
             if (location instanceof GsmCellLocation) {
                 GsmCellLocation loc = (GsmCellLocation) location;

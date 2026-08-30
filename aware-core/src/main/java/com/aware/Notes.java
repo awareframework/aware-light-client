@@ -77,7 +77,7 @@ public class Notes extends Aware_Sensor {
                 Log.d(TAG, "sett up sync frequency");
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Notes_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Notes_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Notes_Provider.getAuthority(this))

@@ -22,7 +22,7 @@ import java.util.ArrayList;
 
 /**
  * Created by denzil on 10/01/2017.
- * <p>
+ *
  * This sensor is used to track device significant motion.
  * Also used internally by AWARE if available to save battery when the device is still with high-frequency sensors
  * Based of:
@@ -90,7 +90,7 @@ public class SignificantMotion extends Aware_Sensor implements SensorEventListen
             @Override
             public void onContext() {
                 ContentValues rowData = new ContentValues();
-                rowData.put(Significant_Provider.Significant_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                rowData.put(Significant_Provider.Significant_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                 rowData.put(Significant_Provider.Significant_Data.TIMESTAMP, System.currentTimeMillis());
                 rowData.put(Significant_Provider.Significant_Data.IS_MOVING, CURRENT_SIGMOTION_STATE);
                 getContentResolver().insert(Significant_Provider.Significant_Data.CONTENT_URI, rowData);
@@ -138,7 +138,7 @@ public class SignificantMotion extends Aware_Sensor implements SensorEventListen
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Significant_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Significant_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Significant_Provider.getAuthority(this))

@@ -38,6 +38,7 @@ import com.aware.providers.Screen_Provider;
 import com.aware.utils.Converters;
 import com.aware.utils.Encrypter;
 import com.aware.utils.Scheduler;
+import com.aware.utils.SensorTimeUnits;
 import org.json.JSONException;
 
 import java.util.ArrayList;
@@ -253,7 +254,7 @@ public class Applications extends AccessibilityService {
             if (!currScreenText.isEmpty() && track_screentext && !event.isPassword()) {
                 ContentValues screenText = new ContentValues();
                 screenText.put(ScreenText_Provider.ScreenTextData.TIMESTAMP, System.currentTimeMillis());
-                screenText.put(ScreenText_Provider.ScreenTextData.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                screenText.put(ScreenText_Provider.ScreenTextData.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
 
                 if (event.getPackageName() != null) {
                     screenText.put(ScreenText_Provider.ScreenTextData.PACKAGE_NAME, event.getPackageName().toString());
@@ -317,7 +318,7 @@ public class Applications extends AccessibilityService {
             Notification notificationDetails = (Notification) event.getParcelableData();
             if (notificationDetails != null) {
                 ContentValues rowData = new ContentValues();
-                rowData.put(Applications_Notifications.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                rowData.put(Applications_Notifications.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                 rowData.put(Applications_Notifications.TIMESTAMP, System.currentTimeMillis());
                 rowData.put(Applications_Notifications.PACKAGE_NAME, event.getPackageName().toString());
                 rowData.put(Applications_Notifications.APPLICATION_NAME, getApplicationName(event.getPackageName().toString()));
@@ -383,7 +384,7 @@ public class Applications extends AccessibilityService {
 
                 ContentValues rowData = new ContentValues();
                 rowData.put(Applications_Foreground.TIMESTAMP, System.currentTimeMillis());
-                rowData.put(Applications_Foreground.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                rowData.put(Applications_Foreground.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                 rowData.put(Applications_Foreground.PACKAGE_NAME, event.getPackageName().toString());
                 rowData.put(Applications_Foreground.APPLICATION_NAME, appName);
                 rowData.put(Applications_Foreground.IS_SYSTEM_APP, pkgInfo != null && isSystemPackage(pkgInfo));
@@ -422,7 +423,7 @@ public class Applications extends AccessibilityService {
 
                             ContentValues crashData = new ContentValues();
                             crashData.put(Applications_Crashes.TIMESTAMP, System.currentTimeMillis());
-                            crashData.put(Applications_Crashes.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                            crashData.put(Applications_Crashes.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                             crashData.put(Applications_Crashes.PACKAGE_NAME, error.processName);
                             crashData.put(Applications_Crashes.APPLICATION_NAME, appName);
                             crashData.put(Applications_Crashes.APPLICATION_VERSION, (pkgInfo != null) ? pkgInfo.versionCode : -1); //some prepackages don't have version codes...
@@ -456,7 +457,7 @@ public class Applications extends AccessibilityService {
         if (Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_KEYBOARD).equals("true") && event.getEventType() == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
             ContentValues keyboard = new ContentValues();
             keyboard.put(Keyboard_Provider.Keyboard_Data.TIMESTAMP, System.currentTimeMillis());
-            keyboard.put(Keyboard_Provider.Keyboard_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+            keyboard.put(Keyboard_Provider.Keyboard_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
             keyboard.put(Keyboard_Provider.Keyboard_Data.PACKAGE_NAME, (String) event.getPackageName());
             keyboard.put(Keyboard_Provider.Keyboard_Data.IS_PASSWORD, event.isPassword());
             if (event.isPassword()){
@@ -492,7 +493,7 @@ public class Applications extends AccessibilityService {
 
                         ContentValues touch = new ContentValues();
                         touch.put(Screen_Provider.Screen_Touch.TIMESTAMP, System.currentTimeMillis());
-                        touch.put(Screen_Provider.Screen_Touch.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                        touch.put(Screen_Provider.Screen_Touch.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                         touch.put(Screen_Provider.Screen_Touch.TOUCH_APP, event.getPackageName().toString());
                         touch.put(Screen_Provider.Screen_Touch.TOUCH_ACTION, Screen.ACTION_AWARE_TOUCH_SCROLLED_UP);
                         touch.put(Screen_Provider.Screen_Touch.TOUCH_INDEX_ITEMS, event.getItemCount());
@@ -512,7 +513,7 @@ public class Applications extends AccessibilityService {
 
                         ContentValues touch = new ContentValues();
                         touch.put(Screen_Provider.Screen_Touch.TIMESTAMP, System.currentTimeMillis());
-                        touch.put(Screen_Provider.Screen_Touch.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                        touch.put(Screen_Provider.Screen_Touch.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                         touch.put(Screen_Provider.Screen_Touch.TOUCH_APP, event.getPackageName().toString());
                         touch.put(Screen_Provider.Screen_Touch.TOUCH_ACTION, Screen.ACTION_AWARE_TOUCH_SCROLLED_DOWN);
                         touch.put(Screen_Provider.Screen_Touch.TOUCH_INDEX_ITEMS, event.getItemCount());
@@ -536,7 +537,7 @@ public class Applications extends AccessibilityService {
             if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 ContentValues touch = new ContentValues();
                 touch.put(Screen_Provider.Screen_Touch.TIMESTAMP, System.currentTimeMillis());
-                touch.put(Screen_Provider.Screen_Touch.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                touch.put(Screen_Provider.Screen_Touch.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                 touch.put(Screen_Provider.Screen_Touch.TOUCH_APP, event.getPackageName().toString());
                 touch.put(Screen_Provider.Screen_Touch.TOUCH_ACTION, Screen.ACTION_AWARE_TOUCH_CLICKED);
                 if (Aware.getSetting(getApplicationContext(), Aware_Preferences.MASK_TOUCH_TEXT).equals("true"))
@@ -560,7 +561,7 @@ public class Applications extends AccessibilityService {
             if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) {
                 ContentValues touch = new ContentValues();
                 touch.put(Screen_Provider.Screen_Touch.TIMESTAMP, System.currentTimeMillis());
-                touch.put(Screen_Provider.Screen_Touch.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                touch.put(Screen_Provider.Screen_Touch.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                 touch.put(Screen_Provider.Screen_Touch.TOUCH_APP, event.getPackageName().toString());
                 touch.put(Screen_Provider.Screen_Touch.TOUCH_ACTION, Screen.ACTION_AWARE_TOUCH_LONG_CLICKED);
                 if (Aware.getSetting(getApplicationContext(), Aware_Preferences.MASK_TOUCH_TEXT).equals("true"))
@@ -620,20 +621,21 @@ public class Applications extends AccessibilityService {
             Aware.setSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_APPLICATIONS, 0);
         }
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP && Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_APPLICATIONS).equals("true") && Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_APPLICATIONS)) > 0) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP && Aware.getSetting(getApplicationContext(), Aware_Preferences.STATUS_APPLICATIONS).equals("true") && Aware.getSettingAsInt(getApplicationContext(), Aware_Preferences.FREQUENCY_APPLICATIONS, 0) > 0) {
             try {
                 Scheduler.Schedule backgroundApps = Scheduler.getSchedule(getApplicationContext(), SCHEDULER_APPLICATIONS_BACKGROUND);
                 if (backgroundApps == null) {
                     backgroundApps = new Scheduler.Schedule(SCHEDULER_APPLICATIONS_BACKGROUND)
-                            .setInterval(Long.parseLong(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_APPLICATIONS)))
+                            .setInterval(SensorTimeUnits.minutesAsIs(Aware.getSettingAsLong(getApplicationContext(), Aware_Preferences.FREQUENCY_APPLICATIONS, 0)))
                             .setActionIntentAction(ACTION_AWARE_APPLICATIONS_HISTORY)
                             .setActionType(Scheduler.ACTION_TYPE_SERVICE)
                             .setActionClass(getPackageName() + "/" + BackgroundService.class.getName());
 
                     Scheduler.saveSchedule(this, backgroundApps);
                 } else {
-                    if (backgroundApps.getInterval() != Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_APPLICATIONS))) {
-                        backgroundApps.setInterval(Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_APPLICATIONS)));
+                    long frequencyApplications = SensorTimeUnits.minutesAsIs(Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_APPLICATIONS, 0));
+                    if (backgroundApps.getInterval() != frequencyApplications) {
+                        backgroundApps.setInterval(frequencyApplications);
                         Scheduler.saveSchedule(this, backgroundApps);
                     }
                 }
@@ -657,7 +659,7 @@ public class Applications extends AccessibilityService {
             ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Applications_Provider.getAuthority(this), 1);
             ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Applications_Provider.getAuthority(this), true);
 
-            long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+            long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
             SyncRequest request = new SyncRequest.Builder()
                     .syncPeriodic(frequency, frequency / 3)
                     .setSyncAdapter(Aware.getAWAREAccount(this), Applications_Provider.getAuthority(this))
@@ -922,7 +924,7 @@ public class Applications extends AccessibilityService {
                         if (appUnclosed == null || !appUnclosed.moveToFirst()) {
                             ContentValues rowData = new ContentValues();
                             rowData.put(Applications_History.TIMESTAMP, System.currentTimeMillis());
-                            rowData.put(Applications_History.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                            rowData.put(Applications_History.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                             rowData.put(Applications_History.PACKAGE_NAME, app.processName);
                             rowData.put(Applications_History.APPLICATION_NAME, appName);
                             rowData.put(Applications_History.PROCESS_IMPORTANCE, app.importance);
@@ -954,7 +956,7 @@ public class Applications extends AccessibilityService {
                             //Insert new importance
                             rowData = new ContentValues();
                             rowData.put(Applications_History.TIMESTAMP, System.currentTimeMillis());
-                            rowData.put(Applications_History.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+                            rowData.put(Applications_History.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
                             rowData.put(Applications_History.PACKAGE_NAME, app.processName);
                             rowData.put(Applications_History.APPLICATION_NAME, appName);
                             rowData.put(Applications_History.PROCESS_IMPORTANCE, app.importance);

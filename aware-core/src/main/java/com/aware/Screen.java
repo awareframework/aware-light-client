@@ -147,7 +147,7 @@ public class Screen extends Aware_Sensor {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Screen_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Screen_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Screen_Provider.getAuthority(this))
@@ -166,7 +166,7 @@ public class Screen extends Aware_Sensor {
             if (intent.getAction().equalsIgnoreCase(Intent.ACTION_SCREEN_ON)) {
                 ContentValues rowData = new ContentValues();
                 rowData.put(Screen_Data.TIMESTAMP, System.currentTimeMillis());
-                rowData.put(Screen_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                rowData.put(Screen_Data.DEVICE_ID, Aware.getDeviceID(context));
                 rowData.put(Screen_Data.SCREEN_STATUS, Screen.STATUS_SCREEN_ON);
                 try {
                     context.getContentResolver().insert(Screen_Data.CONTENT_URI, rowData);
@@ -187,7 +187,7 @@ public class Screen extends Aware_Sensor {
 
                 ContentValues rowData = new ContentValues();
                 rowData.put(Screen_Data.TIMESTAMP, System.currentTimeMillis());
-                rowData.put(Screen_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                rowData.put(Screen_Data.DEVICE_ID, Aware.getDeviceID(context));
                 rowData.put(Screen_Data.SCREEN_STATUS, Screen.STATUS_SCREEN_OFF);
                 try {
                     context.getContentResolver().insert(Screen_Data.CONTENT_URI, rowData);
@@ -209,7 +209,7 @@ public class Screen extends Aware_Sensor {
                 if (km.inKeyguardRestrictedInputMode()) {
                     rowData = new ContentValues();
                     rowData.put(Screen_Data.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Screen_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Screen_Data.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Screen_Data.SCREEN_STATUS, Screen.STATUS_SCREEN_LOCKED);
                     try {
                         context.getContentResolver().insert(Screen_Data.CONTENT_URI, rowData);
@@ -230,7 +230,7 @@ public class Screen extends Aware_Sensor {
             if (intent.getAction().equals(Intent.ACTION_USER_PRESENT)) {
                 ContentValues rowData = new ContentValues();
                 rowData.put(Screen_Data.TIMESTAMP, System.currentTimeMillis());
-                rowData.put(Screen_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                rowData.put(Screen_Data.DEVICE_ID, Aware.getDeviceID(context));
                 rowData.put(Screen_Data.SCREEN_STATUS, Screen.STATUS_SCREEN_UNLOCKED);
                 try {
                     context.getContentResolver().insert(Screen_Data.CONTENT_URI, rowData);

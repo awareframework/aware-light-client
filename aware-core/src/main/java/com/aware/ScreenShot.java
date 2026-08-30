@@ -33,15 +33,14 @@ import androidx.core.app.NotificationCompat;
 import com.aware.providers.ScreenShot_Provider;
 import com.aware.providers.ScreenText_Provider;
 import com.aware.utils.Aware_Sensor;
+import com.aware.utils.UtcTime;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 public class ScreenShot extends Aware_Sensor {
     public static final String CAPTURE_TIME_INTERVAL = "capture_time_interval";
@@ -78,6 +77,7 @@ public class ScreenShot extends Aware_Sensor {
     private String foregroundApp;
     private String application_name;
     private final Object imageReaderLock = new Object();
+    private boolean resourcesCleaned = true;
 
     private final BroadcastReceiver screenStateReceiver = new BroadcastReceiver() {
         @Override
@@ -128,6 +128,7 @@ public class ScreenShot extends Aware_Sensor {
             stopSelf();
             return START_NOT_STICKY;
         }
+        if (!PERMISSIONS_OK) return START_NOT_STICKY;
 
         if (PERMISSIONS_OK) {
             DEBUG = Aware.getSetting(this, Aware_Preferences.DEBUG_FLAG).equals("true");
@@ -137,7 +138,7 @@ public class ScreenShot extends Aware_Sensor {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), ScreenShot_Provider.getAuthority(this))
@@ -146,22 +147,33 @@ public class ScreenShot extends Aware_Sensor {
             }
         }
 
-        int resultCode = intent.getIntExtra(MEDIA_PROJECTION_RESULT_CODE, Activity.RESULT_CANCELED);
-        Intent data = intent.getParcelableExtra(MEDIA_PROJECTION_RESULT_DATA);
+        int resultCode = intent == null
+                ? Activity.RESULT_CANCELED
+                : intent.getIntExtra(MEDIA_PROJECTION_RESULT_CODE, Activity.RESULT_CANCELED);
+        Intent data = intent == null ? null : intent.getParcelableExtra(MEDIA_PROJECTION_RESULT_DATA);
 
         if (resultCode != Activity.RESULT_CANCELED && data != null) {
             mediaProjectionResultCode = resultCode;
             mediaProjectionResultData = data;
         }
 
-        capture_delay = intent.getIntExtra(CAPTURE_TIME_INTERVAL, capture_delay);
-        compressionRate = intent.getIntExtra(COMPRESS_RATE, compressionRate);
-        saveToLocalStorage = intent.getBooleanExtra(STATUS_SCREENSHOT_LOCAL_STORAGE, saveToLocalStorage);
+        if (intent != null) {
+            capture_delay = Math.max(1000, intent.getIntExtra(CAPTURE_TIME_INTERVAL, capture_delay));
+            compressionRate = Math.max(0, Math.min(100,
+                    intent.getIntExtra(COMPRESS_RATE, compressionRate)));
+            saveToLocalStorage = intent.getBooleanExtra(
+                    STATUS_SCREENSHOT_LOCAL_STORAGE, saveToLocalStorage);
+        }
 
         if (mediaProjectionResultCode != 0 && mediaProjectionResultData != null) {
-            startForegroundService(mediaProjectionResultCode, mediaProjectionResultData);
+            // Repeated starts are normal during keep-alive and config reconciliation. Reusing the
+            // active projection prevents a new HandlerThread/Runnable chain on every start.
+            if (mediaProjection == null || virtualDisplay == null) {
+                startForegroundService(mediaProjectionResultCode, mediaProjectionResultData);
+            }
         } else {
             stopSelf();
+            return START_NOT_STICKY;
         }
 
         return START_STICKY;
@@ -206,6 +218,7 @@ public class ScreenShot extends Aware_Sensor {
      * @param data The intent data from the media projection permission request.
      */
     private void startForegroundService(int resultCode, Intent data) {
+        resourcesCleaned = false;
         Intent stopSelf = new Intent(this, ScreenShot.class);
         stopSelf.setAction(ACTION_STOP_CAPTURE);
         PendingIntent pStopSelf = PendingIntent.getService(this, 0, stopSelf, PendingIntent.FLAG_CANCEL_CURRENT);
@@ -284,6 +297,7 @@ public class ScreenShot extends Aware_Sensor {
                         retryCount++;
                         if (retryCount > MAX_RETRY_COUNT) {
                             sendRetryExceededBroadcast();
+                            stopSelf();
                             return;
                         }
                         int retryDelay = Math.min(capture_delay, retryCount * 100);
@@ -380,7 +394,7 @@ public class ScreenShot extends Aware_Sensor {
         }
 
 
-        String formattedTimestamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(timestamp);
+        String formattedTimestamp = UtcTime.fileStamp(timestamp);
         File path = new File(downloadsDirectory, "screenshot_" + formattedTimestamp + ".jpg");
         try (FileOutputStream fos = new FileOutputStream(path)) {
             bitmap.compress(Bitmap.CompressFormat.JPEG, compressionRate, fos); // Use the selected compression rate
@@ -416,7 +430,7 @@ public class ScreenShot extends Aware_Sensor {
     private void storeScreenshotMetadata(byte[] imageData, long timestamp) {
         ContentValues values = new ContentValues();
         values.put(ScreenShot_Provider.ScreenshotData.TIMESTAMP, timestamp);
-        values.put(ScreenShot_Provider.ScreenshotData.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+        values.put(ScreenShot_Provider.ScreenshotData.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
         values.put(ScreenShot_Provider.ScreenshotData.IMAGE_DATA, imageData);
         values.put(ScreenShot_Provider.ScreenshotData.PACKAGE_NAME, foregroundApp);
         values.put(ScreenShot_Provider.ScreenshotData.APPLICATION_NAME, application_name);
@@ -478,19 +492,22 @@ public class ScreenShot extends Aware_Sensor {
      * Cleans up resources used by the screen capturing process.
      */
     private void cleanupResources() {
+        if (resourcesCleaned) return;
+        resourcesCleaned = true;
         Log.d(TAG, "Cleaning up resources");
         stopCapturing();
         if (handlerThread != null) {
             handlerThread.quitSafely();
-        }
-        if (imageReader != null) {
-            imageReader.close();
+            handlerThread = null;
         }
         if (virtualDisplay != null) {
             virtualDisplay.release();
+            virtualDisplay = null;
         }
-        if (mediaProjection != null) {
-            mediaProjection.stop();
+        MediaProjection projection = mediaProjection;
+        mediaProjection = null;
+        if (projection != null) {
+            projection.stop();
         }
 
         synchronized (imageReaderLock) {
@@ -499,6 +516,7 @@ public class ScreenShot extends Aware_Sensor {
                 imageReader = null;
             }
         }
+        handler = null;
 
         // Broadcast that the service has stopped
         Intent intent = new Intent(ACTION_SCREENSHOT_SERVICE_STOPPED);

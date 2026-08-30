@@ -11,6 +11,7 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.ViewGroup;
 import androidx.annotation.NonNull;
@@ -350,7 +351,9 @@ public class ESM_Question extends DialogFragment {
 
             if (getExpirationThreshold() > 0) {
                 expire_monitor = new ESMExpireMonitor(System.currentTimeMillis(), getExpirationThreshold(), getID());
-                expire_monitor.execute();
+                // Expiration monitors are long-lived timers; never occupy AsyncTask's global serial
+                // queue, otherwise study join and other short UI work can never begin.
+                expire_monitor.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
             }
         } catch (JSONException e) {
             e.printStackTrace();
@@ -377,24 +380,12 @@ public class ESM_Question extends DialogFragment {
         @Override
         protected Void doInBackground(Void... params) {
             while ((System.currentTimeMillis() - display_timestamp) / 1000 <= expires_in_seconds) {
-                if (isCancelled()) {
-                    Cursor esm = getActivity().getContentResolver().query(ESM_Provider.ESM_Data.CONTENT_URI, null, ESM_Provider.ESM_Data._ID + "=" + esm_id, null, null);
-                    if (esm != null && esm.moveToFirst()) {
-                        int status = esm.getInt(esm.getColumnIndex(ESM_Provider.ESM_Data.STATUS));
-                        switch (status) {
-                            case ESM.STATUS_ANSWERED:
-                                if (Aware.DEBUG) Log.d(Aware.TAG, "ESM has been answered!");
-                                break;
-                            case ESM.STATUS_DISMISSED:
-                                if (Aware.DEBUG) Log.d(Aware.TAG, "ESM has been dismissed!");
-                                break;
-                        }
-                    }
-                    if (esm != null && !esm.isClosed()) esm.close();
-                    return null;
-                }
+                if (isCancelled()) return null;
+                // Avoid a full-speed busy wait for the entire question expiration window.
+                SystemClock.sleep(1000);
             }
 
+            if (isCancelled() || getActivity() == null) return null;
             if (Aware.DEBUG) Log.d(Aware.TAG, "ESM has expired!");
 
             ContentValues rowData = new ContentValues();

@@ -81,7 +81,9 @@ public class Aware_Preferences {
     public static final String STATUS_APPLICATIONS = "status_applications";
 
     /**
-     * Background applications update frequency (default = 30) seconds
+     * Background applications update frequency, in minutes. Default = 0 (disabled) -- the
+     * scheduled background scan only runs when this is set > 0. Fed directly into
+     * Scheduler.Schedule#setInterval(long), which takes minutes.
      */
     public static final String FREQUENCY_APPLICATIONS = "frequency_applications";
 
@@ -301,7 +303,9 @@ public class Aware_Preferences {
     public static final String STATUS_NETWORK_TRAFFIC = "status_network_traffic";
 
     /**
-     * Network traffic frequency (default = 60), in seconds
+     * Network traffic frequency (default = 60), in seconds.
+     * Currently unused: Traffic.java does not read this setting -- its sync cadence is
+     * driven by FREQUENCY_WEBSERVICE instead.
      */
     public static final String FREQUENCY_NETWORK_TRAFFIC = "frequency_network_traffic";
 
@@ -371,7 +375,9 @@ public class Aware_Preferences {
     public static final String STATUS_TIMEZONE = "status_timezone";
 
     /**
-     * Timezone frequency (default = 3600) in seconds
+     * Timezone frequency (default = 3600) in seconds.
+     * Currently unused: Timezone.java does not read this setting -- its sync cadence is
+     * driven by FREQUENCY_WEBSERVICE instead.
      */
     public static final String FREQUENCY_TIMEZONE = "frequency_timezone";
 
@@ -628,9 +634,95 @@ public class Aware_Preferences {
     public static final String WEBSERVICE_SILENT = "webservice_silent";
 
     /**
-     * Disable the sensors config settings from being updated from the mobile app.
+     * Whether an enrolled participant may maintain a device-specific sensor configuration.
+     * When true, sensor edits made on the phone are persisted into the active study record and
+     * automatic server-config updates are skipped. An explicit "Check for study updates" applies
+     * the complete latest server configuration, including any change that disables this mode.
      */
     public static final String ENABLE_CONFIG_UPDATE = "enable_config_update";
+
+    /**
+     * Serialized JSON payload describing the last study config update the participant hasn't
+     * seen yet (sensors added/removed, enable_config_update change). Written by
+     * StudyUtils.syncStudyConfig() so the notice survives even if no UI was open to receive the
+     * live ACTION_AWARE_STUDY_CONFIG_UPDATED broadcast; cleared once shown.
+     */
+    public static final String PENDING_STUDY_UPDATE_NOTICE = "pending_study_update_notice";
+
+    /**
+     * Validated server configuration found by an editable-mode manual check but not yet accepted
+     * by the participant.
+     */
+    public static final String PENDING_STUDY_CONFIG_APPROVAL = "pending_study_config_approval";
+
+    /**
+     * Study URL awaiting participant re-authentication: set by StudyUtils.syncStudyConfig() when a
+     * password-join study (config_without_password=true) rejects the stored database password
+     * (auth failure, not an unreachable server). Aware_Client shows a password prompt while this is
+     * non-empty; cleared once the participant enters a password the database accepts. Empty means
+     * no re-authentication is pending.
+     */
+    public static final String PENDING_STUDY_REAUTH = "pending_study_reauth";
+
+    /**
+     * When the current delivery outage began, or 0 while delivery is healthy. Held as a start time
+     * rather than a failure count so one outage is one fact however many tables report it.
+     */
+    public static final String UPLOAD_OUTAGE_SINCE = "upload_outage_since";
+
+    /** Short, non-sensitive reason the current outage was first recorded with; empty when healthy. */
+    public static final String UPLOAD_OUTAGE_REASON = "upload_outage_reason";
+
+    /**
+     * Which tables are currently failing to deliver, as {@code table:sinceMs} pairs separated by
+     * commas; empty when every table is delivering.
+     *
+     * Per table rather than one flag for the whole upload, because a single table can fail while its
+     * neighbours succeed — a column the server lacks, or a sensor that has stopped collecting. One
+     * shared flag is cleared by the next table's success, so that case reported itself as healthy.
+     * Held in one setting rather than one per table so adding a sensor needs no new key.
+     */
+    public static final String UPLOAD_OUTAGE_TABLES = "upload_outage_tables";
+
+    /** Whether the participant has already been notified about the current outage. */
+    public static final String UPLOAD_OUTAGE_NOTIFIED = "upload_outage_notified";
+
+    /**
+     * Signature of the last detected mismatch between live sensor settings and the study config
+     * that StudyUtils.syncStudyConfig() attempted to self-heal (empty string = none). Used to avoid
+     * re-applying settings on every sync poll when the drift can't actually be fixed (e.g. a sensor
+     * whose hardware is missing) — see LAST_DRIFT_RECONCILE_TS.
+     */
+    public static final String LAST_DRIFT_SIGNATURE = "last_drift_signature";
+
+    /**
+     * Timestamp (ms) of the last time syncStudyConfig() attempted to self-heal a live-settings
+     * drift matching LAST_DRIFT_SIGNATURE. Paired with a backoff window so an unfixable drift
+     * doesn't restart every sensor service on every ~1 minute sync poll forever.
+     */
+    public static final String LAST_DRIFT_RECONCILE_TS = "last_drift_reconcile_ts";
+
+    /**
+     * Record of the study consent the participant last gave: the study URL plus a fingerprint of
+     * the promptable-sensor set they agreed to (see SensorCollection.consentFingerprint in
+     * aware-phone). Written when the consent screen's Continue completes; compared at join time so
+     * a re-join with an unchanged sensor set can skip the screen. Deliberately NOT preserved across
+     * Aware.reset(): quitting a study wipes it, so the next join always asks for consent again —
+     * OS permissions surviving the quit must not stand in for renewed agreement. Config-sync's
+     * internal reset (StudyUtils.applySettings) snapshots and restores it, since a background sync
+     * is not a consent event in either direction.
+     */
+    public static final String STUDY_CONSENT_RECORD = "study_consent_record";
+
+    /**
+     * Comma-joined status_* keys the participant explicitly declined consent for. Source of truth
+     * for "off by participant choice" (as opposed to "off because the config says so"): applySettings
+     * forces these to false regardless of the config, and syncStudyConfig's drift self-heal excludes
+     * them so a decline isn't re-enabled on the next ~1-minute poll. Preserved across the reset()
+     * inside applySettings, but — like STUDY_CONSENT_RECORD — wiped by the Aware.reset() every quit
+     * path calls, so declines are scoped to the current enrolment.
+     */
+    public static final String STUDY_DECLINED_SENSORS = "study_declined_sensors";
 
     /**
      * Key management strategy.

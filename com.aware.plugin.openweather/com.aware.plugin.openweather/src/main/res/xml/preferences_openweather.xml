@@ -22,19 +22,21 @@
         android:persistent="true"
         android:title="Measurement unit" />
 
-    <EditTextPreference
+    <ListPreference
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:defaultValue="60"
+        android:defaultValue="30"
+        android:entries="@array/weather_frequency_readable"
+        android:entryValues="@array/weather_frequency_values"
         android:key="plugin_openweather_frequency"
         android:persistent="true"
-        android:summary="Every 60 minute(s)"
+        android:summary="Every 30 minute(s)"
         android:title="Update frequency" />
 
     <EditTextPreference
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:defaultValue="ada11fb870974565377df238f3046aa9"
+        android:defaultValue=""
         android:key="plugin_openweather_api_key"
         android:persistent="true"
         android:summary="Get your free API key from openweathermap.org"

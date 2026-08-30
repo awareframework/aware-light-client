@@ -133,7 +133,7 @@ public class Installations extends Aware_Sensor {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Installations_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Installations_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Installations_Provider.getAuthority(this))
@@ -207,7 +207,7 @@ public class Installations extends Aware_Sensor {
 
                     ContentValues rowData = new ContentValues();
                     rowData.put(Installations_Data.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Installations_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Installations_Data.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Installations_Data.PACKAGE_NAME, packageName);
                     rowData.put(Installations_Data.APPLICATION_NAME, appName);
                     rowData.put(Installations_Data.INSTALLATION_STATUS, STATUS_ADDED);
@@ -261,7 +261,7 @@ public class Installations extends Aware_Sensor {
 
                     ContentValues rowData = new ContentValues();
                     rowData.put(Installations_Data.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Installations_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Installations_Data.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Installations_Data.PACKAGE_NAME, packageName);
                     rowData.put(Installations_Data.APPLICATION_NAME, appName);
                     rowData.put(Installations_Data.INSTALLATION_STATUS, STATUS_REMOVED);
@@ -307,7 +307,7 @@ public class Installations extends Aware_Sensor {
 
                     ContentValues rowData = new ContentValues();
                     rowData.put(Installations_Data.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Installations_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Installations_Data.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Installations_Data.PACKAGE_NAME, packageName);
                     rowData.put(Installations_Data.APPLICATION_NAME, appName);
                     rowData.put(Installations_Data.INSTALLATION_STATUS, STATUS_UPDATED);

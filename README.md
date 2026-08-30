@@ -11,8 +11,8 @@ in naturalistic and laboratory settings. The platform can be integrated with MyS
 
 You can get the source code of all the components that make the AWARE client from GitHub.
 ```bash
-$ git clone https://github.com/awareframework/aware-light-client.git
-$ cd aware-light-client
+$ git clone https://github.com/awareframework/aware-client.git
+$ cd aware-client
 $ touch .gitmodules
 $ git submodule update --init
 ```

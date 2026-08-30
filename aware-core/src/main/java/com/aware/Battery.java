@@ -137,7 +137,7 @@ public class Battery extends Aware_Sensor {
 
                 ContentValues rowData = new ContentValues();
                 rowData.put(Battery_Data.TIMESTAMP, System.currentTimeMillis());
-                rowData.put(Battery_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                rowData.put(Battery_Data.DEVICE_ID, Aware.getDeviceID(context));
                 rowData.put(Battery_Data.STATUS, extras.getInt(BatteryManager.EXTRA_STATUS));
                 rowData.put(Battery_Data.LEVEL, extras.getInt(BatteryManager.EXTRA_LEVEL));
                 rowData.put(Battery_Data.SCALE, extras.getInt(BatteryManager.EXTRA_SCALE));
@@ -195,7 +195,7 @@ public class Battery extends Aware_Sensor {
                 if (lastBattery != null && lastBattery.moveToFirst()) {
                     ContentValues rowData = new ContentValues();
                     rowData.put(Battery_Charges.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Battery_Charges.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Battery_Charges.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Battery_Charges.BATTERY_START, lastBattery.getInt(lastBattery.getColumnIndex(Battery_Data.LEVEL)));
                     context.getContentResolver().insert(Battery_Charges.CONTENT_URI, rowData);
                 }
@@ -224,7 +224,7 @@ public class Battery extends Aware_Sensor {
                 if (lastBattery != null && lastBattery.moveToFirst()) {
                     ContentValues rowData = new ContentValues();
                     rowData.put(Battery_Discharges.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Battery_Discharges.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Battery_Discharges.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Battery_Discharges.BATTERY_START, lastBattery.getInt(lastBattery.getColumnIndex(Battery_Data.LEVEL)));
                     context.getContentResolver().insert(Battery_Discharges.CONTENT_URI, rowData);
                 }
@@ -251,7 +251,7 @@ public class Battery extends Aware_Sensor {
                 if (lastBattery != null && lastBattery.moveToFirst()) {
                     ContentValues rowData = new ContentValues();
                     rowData.put(Battery_Data.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Battery_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Battery_Data.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Battery_Data.STATUS, STATUS_PHONE_SHUTDOWN);
                     rowData.put(Battery_Data.LEVEL, lastBattery.getInt(lastBattery.getColumnIndex(Battery_Data.LEVEL)));
                     rowData.put(Battery_Data.SCALE, lastBattery.getInt(lastBattery.getColumnIndex(Battery_Data.SCALE)));
@@ -282,7 +282,7 @@ public class Battery extends Aware_Sensor {
                 if (lastBattery != null && lastBattery.moveToFirst()) {
                     ContentValues rowData = new ContentValues();
                     rowData.put(Battery_Data.TIMESTAMP, System.currentTimeMillis());
-                    rowData.put(Battery_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                    rowData.put(Battery_Data.DEVICE_ID, Aware.getDeviceID(context));
                     rowData.put(Battery_Data.STATUS, STATUS_PHONE_REBOOT);
                     rowData.put(Battery_Data.LEVEL, lastBattery.getInt(lastBattery.getColumnIndex(Battery_Data.LEVEL)));
                     rowData.put(Battery_Data.SCALE, lastBattery.getInt(lastBattery.getColumnIndex(Battery_Data.SCALE)));
@@ -416,7 +416,7 @@ public class Battery extends Aware_Sensor {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Battery_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Battery_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Battery_Provider.getAuthority(this))

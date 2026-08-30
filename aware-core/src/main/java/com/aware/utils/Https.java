@@ -112,6 +112,12 @@ public class Https {
             path_connection.setConnectTimeout(timeout);
             path_connection.setRequestMethod("POST");
             path_connection.setDoOutput(true);
+            // A form-encoded body needs the header that says so. Without it a server
+            // that parses by content type finds no parameters at all and answers as
+            // though the request were empty -- which is what the AWARE micro-server
+            // does, refusing the insert for a missing device_id.
+            path_connection.setRequestProperty(
+                    "Content-Type", "application/x-www-form-urlencoded");
 
             if (is_gzipped) path_connection.setRequestProperty("accept-encoding", "gzip");
 

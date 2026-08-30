@@ -6,6 +6,8 @@
     <string name="channel_general_description">General AWARE notifications</string>
     <string name="channel_silent_description">Non-interruptive AWARE notifications</string>
     <string name="channel_datasync_description">AWARE datasync notifications</string>
+    <string name="channel_foreground_name">AWARE background collection</string>
+    <string name="channel_foreground_description">Shows when AWARE is collecting study data in the background</string>
 
     <string name="read_permission">Allow read-only access to the local data.</string>
     <string name="write_permission">Allow read and write access to the local data.</string>
@@ -22,9 +24,19 @@
     <string name="aware_battery_recharge">Please, recharge your phone as soon as possible.</string>
     <string name="aware_notif_study_sync_title">Study Sync</string>
     <string name="aware_notif_study_sync">Your study configuration was updated.</string>
+    <string name="aware_notif_study_reauth_title">Study password required</string>
+    <string name="aware_notif_study_reauth">Data collection is paused. Tap to enter the study password.</string>
+    <string name="aware_notif_study_update_title">Your study changed</string>
+    <string name="aware_notif_study_update_consent">New sensors need your consent. Tap to review what the study collects.</string>
+    <string name="aware_notif_study_update_sensors">Tap to see which sensors changed.</string>
+    <string name="aware_notif_upload_stalled_title">Study data is not being sent</string>
+    <string name="aware_notif_upload_stalled">Your data is still being collected and kept safely on this device, but it is not reaching the study server right now. Tap for details. Checking your internet connection may help.</string>
+    <string name="aware_notif_researcher_message_title">Message from your study</string>
+    <string name="aware_notif_researcher_message_body">You have a new message from your study.</string>
     <string name="aware_join_study_link">Join Study by link</string>
     <string name="aware_team">Team</string>
     <string name="aware_qrcode">QRCode</string>
+    <string name="join_study_scan_qr">Or scan the study QR code</string>
     <string name="aware_sync">Sync</string>
     <string name="aware_study">Study</string>
     <string name="aware_esm_other">Other</string>
@@ -40,7 +52,7 @@
     <string name="sign_up">Sign Up!</string>
     <string name="install">Install</string>
     <string name="foreground_notification_title">AWARE</string>
-    <string name="foreground_notification_text">Data collection active</string>
+    <string name="foreground_notification_text">Collecting study data in the background</string>
     <string name="foreground_notification_sync_text">Sync</string>
 
     <string name="sensor_screentext">ScreenText</string>

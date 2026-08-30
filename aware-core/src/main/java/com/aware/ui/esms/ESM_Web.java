@@ -41,7 +41,7 @@ public class ESM_Web extends ESM_Question {
         }
 
         //add support to passing AWARE's Device ID as parameter for online surveys
-        String url = esm.getString(esm_url).replace("AWARE_DEVICE_ID", Aware.getSetting(getContext(), Aware_Preferences.DEVICE_ID));
+        String url = esm.getString(esm_url).replace("AWARE_DEVICE_ID", Aware.getDeviceID(getContext()));
         return url;
     }
 

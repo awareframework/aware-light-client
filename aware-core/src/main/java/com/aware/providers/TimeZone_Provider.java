@@ -16,6 +16,7 @@ import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -90,23 +91,22 @@ public class TimeZone_Provider extends ContentProvider {
         initialiseDatabase();
 
         //lock database for transaction
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case TIMEZONE:
-                count = database.delete(DATABASE_TABLES[0], selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case TIMEZONE:
+                    count = database.delete(DATABASE_TABLES[0], selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 
     @Override
@@ -131,25 +131,23 @@ public class TimeZone_Provider extends ContentProvider {
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        switch (sUriMatcher.match(uri)) {
-            case TIMEZONE:
-                long timezone_id = database.insertWithOnConflict(DATABASE_TABLES[0],
-                        TimeZone_Data.TIMEZONE, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (timezone_id > 0) {
-                    Uri tele_uri = ContentUris.withAppendedId(
-                            TimeZone_Data.CONTENT_URI, timezone_id);
-                    getContext().getContentResolver().notifyChange(tele_uri, null, false);
-                    return tele_uri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            switch (sUriMatcher.match(uri)) {
+                case TIMEZONE:
+                    long timezone_id = database.insertWithOnConflict(DATABASE_TABLES[0],
+                            TimeZone_Data.TIMEZONE, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (timezone_id > 0) {
+                        Uri tele_uri = ContentUris.withAppendedId(
+                                TimeZone_Data.CONTENT_URI, timezone_id);
+                        getContext().getContentResolver().notifyChange(tele_uri, null, false);
+                        return tele_uri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
         }
     }
 
@@ -209,7 +207,7 @@ public class TimeZone_Provider extends ContentProvider {
             if (Aware.DEBUG)
                 Log.e(Aware.TAG, e.getMessage());
 
-            return null;
+            throw e;
         }
     }
 
@@ -222,22 +220,21 @@ public class TimeZone_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case TIMEZONE:
-                count = database.update(DATABASE_TABLES[0], values, selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case TIMEZONE:
+                    count = database.update(DATABASE_TABLES[0], values, selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 }

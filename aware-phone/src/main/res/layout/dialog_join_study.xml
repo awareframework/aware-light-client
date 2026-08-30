@@ -27,6 +27,19 @@
         android:layout_marginLeft="16dp"
         android:layout_marginRight="16dp"
         android:id="@+id/et_join_study_url"
+        android:hint="Paste the study link"
+        android:inputType="textUri"
+        />
+
+    <Button
+        android:id="@+id/btn_scan_study_qr"
+        android:layout_height="wrap_content"
+        android:layout_width="wrap_content"
+        android:layout_marginLeft="16dp"
+        android:layout_marginRight="16dp"
+        android:layout_marginTop="4dp"
+        android:text="@string/join_study_scan_qr"
+        style="?android:attr/borderlessButtonStyle"
         />
 
     <TextView

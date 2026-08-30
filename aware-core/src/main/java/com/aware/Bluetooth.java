@@ -29,6 +29,7 @@ import com.aware.providers.Bluetooth_Provider.Bluetooth_Data;
 import com.aware.providers.Bluetooth_Provider.Bluetooth_Sensor;
 import com.aware.utils.Aware_Sensor;
 import com.aware.utils.Encrypter;
+import com.aware.utils.SensorTimeUnits;
 
 import java.util.HashMap;
 
@@ -204,14 +205,14 @@ public class Bluetooth extends Aware_Sensor {
 
                 save_bluetooth_device(bluetoothAdapter);
 
-                if (FREQUENCY != Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_BLUETOOTH))) {
+                if (FREQUENCY != Aware.getSettingAsInt(getApplicationContext(), Aware_Preferences.FREQUENCY_BLUETOOTH, 60)) {
                     alarmManager.cancel(bluetoothScan);
                     alarmManager.setRepeating(AlarmManager.RTC_WAKEUP,
-                            System.currentTimeMillis() + Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_BLUETOOTH)) * 1000,
-                            Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_BLUETOOTH)) * 2 * 1000,
+                            System.currentTimeMillis() + SensorTimeUnits.secondsToMillis(Aware.getSettingAsInt(getApplicationContext(), Aware_Preferences.FREQUENCY_BLUETOOTH, 60)),
+                            SensorTimeUnits.doubleSecondsToMillis(Aware.getSettingAsInt(getApplicationContext(), Aware_Preferences.FREQUENCY_BLUETOOTH, 60)),
                             bluetoothScan);
 
-                    FREQUENCY = Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_BLUETOOTH));
+                    FREQUENCY = Aware.getSettingAsInt(getApplicationContext(), Aware_Preferences.FREQUENCY_BLUETOOTH, 60);
                 }
                 if (Aware.DEBUG) Log.d(TAG, "Bluetooth service active: " + FREQUENCY + "s");
 
@@ -229,7 +230,7 @@ public class Bluetooth extends Aware_Sensor {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Bluetooth_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Bluetooth_Provider.getAuthority(this), true);
 
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Bluetooth_Provider.getAuthority(this))
@@ -246,13 +247,20 @@ public class Bluetooth extends Aware_Sensor {
         public void run() {
             BluetoothLeScanner scanner = bluetoothAdapter.getBluetoothLeScanner();
             if (scanner != null && !isBLEScanning) {
-                mBLEHandler.postDelayed(stopScan, 3000);
-                scanner.startScan(null, scanSettings, scanCallback);
-                if (awareSensor != null) awareSensor.onBLEScanStarted();
-                if (Aware.DEBUG) Log.d(TAG, ACTION_AWARE_BLUETOOTH_BLE_SCAN_STARTED);
-                Intent scanStart = new Intent(ACTION_AWARE_BLUETOOTH_BLE_SCAN_STARTED);
-                sendBroadcast(scanStart);
-                isBLEScanning = !isBLEScanning;
+                try {
+                    // startScan needs BLUETOOTH_SCAN on Android 12+; skip the scan rather than crash
+                    // the app if it isn't granted.
+                    mBLEHandler.postDelayed(stopScan, 3000);
+                    scanner.startScan(null, scanSettings, scanCallback);
+                    if (awareSensor != null) awareSensor.onBLEScanStarted();
+                    if (Aware.DEBUG) Log.d(TAG, ACTION_AWARE_BLUETOOTH_BLE_SCAN_STARTED);
+                    Intent scanStart = new Intent(ACTION_AWARE_BLUETOOTH_BLE_SCAN_STARTED);
+                    sendBroadcast(scanStart);
+                    isBLEScanning = !isBLEScanning;
+                } catch (SecurityException e) {
+                    Log.w(TAG, "Skipping BLE scan: missing BLUETOOTH_SCAN permission", e);
+                    mBLEHandler.removeCallbacks(stopScan);
+                }
             }
         }
     };
@@ -262,7 +270,11 @@ public class Bluetooth extends Aware_Sensor {
         public void run() {
             BluetoothLeScanner scanner = bluetoothAdapter.getBluetoothLeScanner();
             if (scanner != null && isBLEScanning) {
-                scanner.stopScan(scanCallback);
+                try {
+                    scanner.stopScan(scanCallback);
+                } catch (SecurityException e) {
+                    Log.w(TAG, "Skipping BLE stopScan: missing BLUETOOTH_SCAN permission", e);
+                }
                 if (awareSensor != null) awareSensor.onBLEScanEnded();
                 if (Aware.DEBUG) Log.d(TAG, ACTION_AWARE_BLUETOOTH_BLE_SCAN_ENDED);
                 Intent scanEnd = new Intent(ACTION_AWARE_BLUETOOTH_BLE_SCAN_ENDED);
@@ -283,7 +295,7 @@ public class Bluetooth extends Aware_Sensor {
             discoveredBLE.put(bluetoothDevice.getAddress(), bluetoothDevice);
 
             ContentValues rowData = new ContentValues();
-            rowData.put(Bluetooth_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+            rowData.put(Bluetooth_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
             rowData.put(Bluetooth_Data.TIMESTAMP, System.currentTimeMillis());
             rowData.put(Bluetooth_Data.BT_ADDRESS, Encrypter.hashMac(getApplicationContext(), bluetoothDevice.getAddress()));
             rowData.put(Bluetooth_Data.BT_NAME, Encrypter.hashSsid(getApplicationContext(), bluetoothDevice.getName()));
@@ -377,7 +389,7 @@ public class Bluetooth extends Aware_Sensor {
                 Short btDeviceRSSI = extras.getShort(BluetoothDevice.EXTRA_RSSI);
 
                 ContentValues rowData = new ContentValues();
-                rowData.put(Bluetooth_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                rowData.put(Bluetooth_Data.DEVICE_ID, Aware.getDeviceID(context));
                 rowData.put(Bluetooth_Data.TIMESTAMP, System.currentTimeMillis());
                 rowData.put(Bluetooth_Data.BT_ADDRESS, Encrypter.hashMac(context, btDevice.getAddress()));
                 rowData.put(Bluetooth_Data.BT_NAME, Encrypter.hashSsid(context, btDevice.getName()));
@@ -436,15 +448,18 @@ public class Bluetooth extends Aware_Sensor {
 
             if (intent.getAction().equals(ACTION_AWARE_BLUETOOTH_REQUEST_SCAN)) {
                 //interrupt ongoing scans
-                if (bluetoothAdapter.isDiscovering()) bluetoothAdapter.cancelDiscovery();
-                if (!bluetoothAdapter.isDiscovering()) {
-                    if (bluetoothAdapter.isEnabled()) {
-                        bluetoothAdapter.startDiscovery();
-                    } else {
+                try {
+                    // isDiscovering/cancelDiscovery/startDiscovery need BLUETOOTH_SCAN on Android 12+;
+                    // skip the scan rather than crash the app if it isn't granted.
+                    if (bluetoothAdapter.isDiscovering()) bluetoothAdapter.cancelDiscovery();
+                    if (!bluetoothAdapter.isDiscovering()) {
+                        if (bluetoothAdapter.isEnabled()) {
+                            bluetoothAdapter.startDiscovery();
+                        } else {
                         //Bluetooth is off
                         if (Aware.DEBUG) Log.d(TAG, "Bluetooth is turned off...");
                         ContentValues rowData = new ContentValues();
-                        rowData.put(Bluetooth_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                        rowData.put(Bluetooth_Data.DEVICE_ID, Aware.getDeviceID(context));
                         rowData.put(Bluetooth_Data.TIMESTAMP, System.currentTimeMillis());
                         rowData.put(Bluetooth_Data.BT_NAME, "disabled");
                         rowData.put(Bluetooth_Data.BT_ADDRESS, "disabled");
@@ -460,6 +475,9 @@ public class Bluetooth extends Aware_Sensor {
                             if (Aware.DEBUG) Log.d(TAG, e.getMessage());
                         }
                     }
+                    }
+                } catch (SecurityException se) {
+                    Log.w(TAG, "Skipping Bluetooth discovery: missing BLUETOOTH_SCAN permission", se);
                 }
             }
 
@@ -468,7 +486,7 @@ public class Bluetooth extends Aware_Sensor {
                 if (btDevice == null) return;
 
                 ContentValues rowData = new ContentValues();
-                rowData.put(Bluetooth_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                rowData.put(Bluetooth_Data.DEVICE_ID, Aware.getDeviceID(context));
                 rowData.put(Bluetooth_Data.TIMESTAMP, System.currentTimeMillis());
                 rowData.put(Bluetooth_Data.BT_ADDRESS, Encrypter.hashMac(context, btDevice.getAddress()));
                 rowData.put(Bluetooth_Data.BT_NAME, Encrypter.hashSsid(context, btDevice.getName()));
@@ -492,7 +510,7 @@ public class Bluetooth extends Aware_Sensor {
                 if (btDevice == null) return;
 
                 ContentValues rowData = new ContentValues();
-                rowData.put(Bluetooth_Data.DEVICE_ID, Aware.getSetting(context, Aware_Preferences.DEVICE_ID));
+                rowData.put(Bluetooth_Data.DEVICE_ID, Aware.getDeviceID(context));
                 rowData.put(Bluetooth_Data.TIMESTAMP, System.currentTimeMillis());
                 rowData.put(Bluetooth_Data.BT_ADDRESS, Encrypter.hashMac(context, btDevice.getAddress()));
                 rowData.put(Bluetooth_Data.BT_NAME, Encrypter.hashSsid(context, btDevice.getName()));
@@ -520,15 +538,23 @@ public class Bluetooth extends Aware_Sensor {
 
         Cursor sensorBT = getContentResolver().query(Bluetooth_Sensor.CONTENT_URI, null, null, null, null);
         if (sensorBT == null || !sensorBT.moveToFirst()) {
-            ContentValues rowData = new ContentValues();
-            rowData.put(Bluetooth_Sensor.TIMESTAMP, System.currentTimeMillis());
-            rowData.put(Bluetooth_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
-            rowData.put(Bluetooth_Sensor.BT_ADDRESS, Encrypter.hashMac(getApplicationContext(), btAdapter.getAddress()));
-            rowData.put(Bluetooth_Sensor.BT_NAME, Encrypter.hashSsid(getApplicationContext(), btAdapter.getName()));
+            try {
+                // getAddress()/getName() require the BLUETOOTH_CONNECT runtime permission on Android 12+
+                // (API 31). Without it the platform throws a SecurityException — and since this runs in
+                // onStartCommand on the main thread, an uncaught one crashes the whole app. Skip saving
+                // the local device info rather than crash if the permission isn't granted.
+                ContentValues rowData = new ContentValues();
+                rowData.put(Bluetooth_Sensor.TIMESTAMP, System.currentTimeMillis());
+                rowData.put(Bluetooth_Sensor.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
+                rowData.put(Bluetooth_Sensor.BT_ADDRESS, Encrypter.hashMac(getApplicationContext(), btAdapter.getAddress()));
+                rowData.put(Bluetooth_Sensor.BT_NAME, Encrypter.hashSsid(getApplicationContext(), btAdapter.getName()));
 
-            getContentResolver().insert(Bluetooth_Sensor.CONTENT_URI, rowData);
+                getContentResolver().insert(Bluetooth_Sensor.CONTENT_URI, rowData);
 
-            if (Aware.DEBUG) Log.d(TAG, "Bluetooth local information: " + rowData.toString());
+                if (Aware.DEBUG) Log.d(TAG, "Bluetooth local information: " + rowData.toString());
+            } catch (SecurityException e) {
+                Log.w(TAG, "Skipping local Bluetooth info: missing BLUETOOTH_CONNECT permission", e);
+            }
         }
         if (sensorBT != null && !sensorBT.isClosed()) sensorBT.close();
     }

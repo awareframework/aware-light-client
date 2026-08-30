@@ -14,13 +14,14 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.ProgressBar;
+import android.widget.Toast;
 
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
 import com.aware.ScreenShot;
 import com.aware.phone.ui.Aware_Client;
 import com.aware.providers.Aware_Provider;
-
+import com.aware.utils.StudyUtils;
 
 /**
  * Manages dialog that is used to quit a study.
@@ -29,6 +30,7 @@ public class QuitStudyDialog extends DialogFragment {
     private static final String TAG = "AWARE::QuitStudyDialog";
     private Activity mActivity;
     private ProgressBar mProgressBar;
+    private ContentValues mStudyExitEntry;
 
     public QuitStudyDialog(Activity activity) {
         this.mActivity = activity;
@@ -37,50 +39,43 @@ public class QuitStudyDialog extends DialogFragment {
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         AlertDialog.Builder builder = new AlertDialog.Builder(mActivity);
-        builder.setTitle("Quit Study")
-                .setMessage("Are you sure you want to quit the study?")
+        builder.setTitle("Leave this study?")
+                .setMessage("Leaving stops this study's data collection and removes its settings "
+                        + "from this device. Data already uploaded is not deleted.\n\n"
+                        + "Are you sure you want to leave?")
                 .setCancelable(true)
-                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                .setPositiveButton("Leave study", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialogInterface, int i) {
-                        Cursor dbStudy = Aware.getStudy(mActivity, Aware.getSetting(mActivity, Aware_Preferences.WEBSERVICE_SERVER));
+                        Cursor dbStudy = Aware.getActiveStudy(mActivity);
                         if (dbStudy != null && dbStudy.moveToFirst()) {
-                            ContentValues complianceEntry = new ContentValues();
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(mActivity, Aware_Preferences.DEVICE_ID));
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_KEY, dbStudy.getInt(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)));
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_API, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_API)));
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_URL, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_URL)));
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_PI, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_PI)));
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_CONFIG)));
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_JOINED, dbStudy.getLong(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_JOINED)));
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_EXIT, System.currentTimeMillis());
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TITLE, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_TITLE)));
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION)));
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_COMPLIANCE, "quit study");
-
-                            mActivity.getContentResolver().insert(Aware_Provider.Aware_Studies.CONTENT_URI, complianceEntry);
+                            mStudyExitEntry = createStudyExitEntry(dbStudy);
                         }
                         if (dbStudy != null && !dbStudy.isClosed()) dbStudy.close();
 
                         dialogInterface.dismiss();
 
-                        new QuitStudyAsync().execute();
+                        if (mStudyExitEntry != null) {
+                            // Leaving a study is also completion-critical UI work; do not queue it
+                            // behind long-lived ESM timers on AsyncTask's serial executor.
+                            new QuitStudyAsync().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+                        } else {
+                            showLeaveFailedDialog();
+                        }
                     }
                 })
-                .setNegativeButton("No", new DialogInterface.OnClickListener() {
+                .setNegativeButton("Stay in study", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialogInterface, int i) {
-                        Cursor dbStudy = Aware.getStudy(mActivity, Aware.getSetting(mActivity, Aware_Preferences.WEBSERVICE_SERVER));
+                        Cursor dbStudy = Aware.getActiveStudy(mActivity);
                         if (dbStudy != null && dbStudy.moveToFirst()) {
                             ContentValues complianceEntry = new ContentValues();
                             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(mActivity, Aware_Preferences.DEVICE_ID));
+                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getDeviceID(mActivity));
                             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_KEY, dbStudy.getInt(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)));
                             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_API, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_API)));
                             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_URL, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_URL)));
                             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_PI, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_PI)));
-                            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_CONFIG)));
                             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_JOINED, dbStudy.getLong(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_JOINED)));
                             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_EXIT, dbStudy.getLong(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_EXIT)));
                             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TITLE, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_TITLE)));
@@ -99,6 +94,11 @@ public class QuitStudyDialog extends DialogFragment {
 
     @Override
     public void onDismiss(DialogInterface dialog) {
+        // A confirmed leave uses the targeted, acknowledged upload below. Starting the full
+        // provider sync at the same time would compete for the JDBC connection and make leaving
+        // slow again.
+        if (mStudyExitEntry != null) return;
+
         // Sync to server the studies statuses
         Bundle sync = new Bundle();
         sync.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
@@ -110,19 +110,17 @@ public class QuitStudyDialog extends DialogFragment {
      * Store information on attempt to quit study and then show the dialog to confirm the quit.
      */
     public void showDialog() {
-        String study_url = Aware.getSetting(mActivity, Aware_Preferences.WEBSERVICE_SERVER);
-        Log.i(TAG, "Quitting from study with URL: " + study_url);
+        Log.i(TAG, "Quitting from active study");
 
-        Cursor dbStudy = Aware.getStudy(mActivity, study_url);
+        Cursor dbStudy = Aware.getActiveStudy(mActivity);
         if (dbStudy != null && dbStudy.moveToFirst()) {
             ContentValues complianceEntry = new ContentValues();
             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
-            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getSetting(mActivity, Aware_Preferences.DEVICE_ID));
+            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID, Aware.getDeviceID(mActivity));
             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_KEY, dbStudy.getInt(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)));
             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_API, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_API)));
             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_URL, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_URL)));
             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_PI, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_PI)));
-            complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_CONFIG, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_CONFIG)));
             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_JOINED, dbStudy.getLong(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_JOINED)));
             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_EXIT, dbStudy.getLong(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_EXIT)));
             complianceEntry.put(Aware_Provider.Aware_Studies.STUDY_TITLE, dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_TITLE)));
@@ -135,7 +133,7 @@ public class QuitStudyDialog extends DialogFragment {
         this.show(mActivity.getFragmentManager(), "dialog");
     }
 
-    private class QuitStudyAsync extends AsyncTask<Void, Void, Void> {
+    private class QuitStudyAsync extends AsyncTask<Void, Void, Boolean> {
         ProgressDialog mQuitting;
 
         @Override
@@ -147,40 +145,88 @@ public class QuitStudyDialog extends DialogFragment {
             mQuitting.setCancelable(false);
             mQuitting.setInverseBackgroundForced(false);
             mQuitting.show();
-            mQuitting.setOnDismissListener(new DialogInterface.OnDismissListener() {
-                @Override
-                public void onDismiss(DialogInterface dialogInterface) {
-                    mActivity.finish();
-
-                    // Redirect the user to the main UI
-                    Intent mainUI = new Intent(mActivity, Aware_Client.class);
-                    mainUI.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(mainUI);
-                }
-            });
         }
 
         @Override
-        protected Void doInBackground(Void... params) {
-            // Stop the screenshot service
+        protected Boolean doInBackground(Void... params) {
+            // Best-effort: notify the researcher if the database is reachable, but never block
+            // leaving on it. A participant must always be able to withdraw, even when the research
+            // database is temporarily down or gone for good. The exit is recorded locally either
+            // way; the compliance value records whether the researcher could be notified.
+            boolean notified = StudyUtils.uploadStudyExit(
+                    mActivity.getApplicationContext(), mStudyExitEntry);
+            if (!notified) {
+                mStudyExitEntry.put(Aware_Provider.Aware_Studies.STUDY_COMPLIANCE,
+                        "quit study (server unreachable, not notified)");
+            }
+
+            mActivity.getContentResolver().insert(
+                    Aware_Provider.Aware_Studies.CONTENT_URI, mStudyExitEntry);
             stopScreenshotService();
-
-            // Reset Aware settings
             Aware.reset(mActivity);
-            return null;
+            return notified;
         }
 
 
         @Override
-        protected void onPostExecute(Void aVoid) {
-            super.onPostExecute(aVoid);
+        protected void onPostExecute(Boolean notified) {
+            super.onPostExecute(notified);
             mQuitting.dismiss();
+
+            // Leaving always succeeds locally; only the researcher notification is best-effort.
+            if (!notified && mActivity != null && !mActivity.isFinishing()) {
+                Toast.makeText(mActivity,
+                        "You've left the study. The researcher could not be notified "
+                                + "(server unreachable).",
+                        Toast.LENGTH_LONG).show();
+            }
+
+            if (mActivity == null) return;
+            mActivity.finish();
+            Intent mainUI = new Intent(mActivity, Aware_Client.class);
+            mainUI.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(mainUI);
         }
     }
 
     private void stopScreenshotService() {
         Intent serviceIntent = new Intent(mActivity, ScreenShot.class);
         mActivity.stopService(serviceIntent);
+    }
+
+    private ContentValues createStudyExitEntry(Cursor dbStudy) {
+        ContentValues entry = new ContentValues();
+        entry.put(Aware_Provider.Aware_Studies.STUDY_TIMESTAMP, System.currentTimeMillis());
+        entry.put(Aware_Provider.Aware_Studies.STUDY_DEVICE_ID,
+                Aware.getDeviceID(mActivity));
+        entry.put(Aware_Provider.Aware_Studies.STUDY_KEY,
+                dbStudy.getInt(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_KEY)));
+        entry.put(Aware_Provider.Aware_Studies.STUDY_API,
+                dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_API)));
+        entry.put(Aware_Provider.Aware_Studies.STUDY_URL,
+                dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_URL)));
+        entry.put(Aware_Provider.Aware_Studies.STUDY_PI,
+                dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_PI)));
+        entry.put(Aware_Provider.Aware_Studies.STUDY_JOINED,
+                dbStudy.getLong(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_JOINED)));
+        entry.put(Aware_Provider.Aware_Studies.STUDY_EXIT, System.currentTimeMillis());
+        entry.put(Aware_Provider.Aware_Studies.STUDY_TITLE,
+                dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_TITLE)));
+        entry.put(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION,
+                dbStudy.getString(dbStudy.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_DESCRIPTION)));
+        entry.put(Aware_Provider.Aware_Studies.STUDY_COMPLIANCE, "quit study");
+        return entry;
+    }
+
+    private void showLeaveFailedDialog() {
+        if (mActivity == null || mActivity.isFinishing()) return;
+
+        new AlertDialog.Builder(mActivity)
+                .setTitle("Could not leave study")
+                .setMessage("The researcher could not be notified. Check your internet connection "
+                        + "and try again. You are still enrolled and no study settings were removed.")
+                .setPositiveButton("OK", null)
+                .show();
     }
 
 }

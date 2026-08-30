@@ -17,6 +17,7 @@ import android.util.Log;
 import com.aware.Aware;
 import com.aware.Barometer;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -28,7 +29,7 @@ import java.util.HashMap;
  */
 public class Gravity_Provider extends ContentProvider {
 
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 4;
 
     /**
      * Authority of content provider
@@ -89,7 +90,6 @@ public class Gravity_Provider extends ContentProvider {
         public static final String VALUES_1 = "double_values_1";
         public static final String VALUES_2 = "double_values_2";
         public static final String ACCURACY = "accuracy";
-        public static final String LABEL = "label";
     }
 
     public static String DATABASE_NAME = "gravity.db";
@@ -117,8 +117,7 @@ public class Gravity_Provider extends ContentProvider {
                     + Gravity_Data.VALUES_0 + " real default 0,"
                     + Gravity_Data.VALUES_1 + " real default 0,"
                     + Gravity_Data.VALUES_2 + " real default 0,"
-                    + Gravity_Data.ACCURACY + " integer default 0,"
-                    + Gravity_Data.LABEL + " text default ''"};
+                    + Gravity_Data.ACCURACY + " integer default 0"};
 
     private UriMatcher sUriMatcher = null;
     private HashMap<String, String> sensorDeviceMap = null;
@@ -128,8 +127,10 @@ public class Gravity_Provider extends ContentProvider {
     private static SQLiteDatabase database;
 
     private void initialiseDatabase() {
-        if (dbHelper == null)
+        if (dbHelper == null) {
             dbHelper = new DatabaseHelper(getContext(), DATABASE_NAME, null, DATABASE_VERSION, DATABASE_TABLES, TABLES_FIELDS);
+            dbHelper.setMetadataOnlyTrailingColumnDrops("label");
+        }
         if (database == null)
             database = dbHelper.getWritableDatabase();
     }
@@ -142,28 +143,27 @@ public class Gravity_Provider extends ContentProvider {
         initialiseDatabase();
 
         //lock database for transaction
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case SENSOR_DEV:
-                count = database.delete(DATABASE_TABLES[0], selection,
-                        selectionArgs);
-                break;
-            case SENSOR_DATA:
-                count = database.delete(DATABASE_TABLES[1], selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case SENSOR_DEV:
+                    count = database.delete(DATABASE_TABLES[0], selection,
+                            selectionArgs);
+                    break;
+                case SENSOR_DATA:
+                    count = database.delete(DATABASE_TABLES[1], selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 
     @Override
@@ -191,38 +191,34 @@ public class Gravity_Provider extends ContentProvider {
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        switch (sUriMatcher.match(uri)) {
-            case SENSOR_DEV:
-                long accel_id = database.insertWithOnConflict(DATABASE_TABLES[0],
-                        Gravity_Sensor.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (accel_id > 0) {
-                    Uri accelUri = ContentUris.withAppendedId(
-                            Gravity_Sensor.CONTENT_URI, accel_id);
-                    getContext().getContentResolver().notifyChange(accelUri, null, false);
-                    return accelUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            case SENSOR_DATA:
-                long accelData_id = database.insertWithOnConflict(DATABASE_TABLES[1],
-                        Gravity_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (accelData_id > 0) {
-                    Uri accelDataUri = ContentUris.withAppendedId(
-                            Gravity_Data.CONTENT_URI, accelData_id);
-                    getContext().getContentResolver().notifyChange(accelDataUri, null, false);
-                    return accelDataUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            switch (sUriMatcher.match(uri)) {
+                case SENSOR_DEV:
+                    long accel_id = database.insertWithOnConflict(DATABASE_TABLES[0],
+                            Gravity_Sensor.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (accel_id > 0) {
+                        Uri accelUri = ContentUris.withAppendedId(
+                                Gravity_Sensor.CONTENT_URI, accel_id);
+                        getContext().getContentResolver().notifyChange(accelUri, null, false);
+                        return accelUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                case SENSOR_DATA:
+                    long accelData_id = database.insertWithOnConflict(DATABASE_TABLES[1],
+                            Gravity_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (accelData_id > 0) {
+                        Uri accelDataUri = ContentUris.withAppendedId(
+                                Gravity_Data.CONTENT_URI, accelData_id);
+                        getContext().getContentResolver().notifyChange(accelDataUri, null, false);
+                        return accelDataUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
         }
     }
 
@@ -237,51 +233,50 @@ public class Gravity_Provider extends ContentProvider {
     public synchronized int bulkInsert(Uri uri, ContentValues[] values) {
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case SENSOR_DEV:
-                for (ContentValues v : values) {
-                    long id;
-                    try {
-                        id = database.insertOrThrow(DATABASE_TABLES[0], Gravity_Sensor.DEVICE_ID, v);
-                    } catch (SQLException e) {
-                        id = database.replace(DATABASE_TABLES[0], Gravity_Sensor.DEVICE_ID, v);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case SENSOR_DEV:
+                    for (ContentValues v : values) {
+                        long id;
+                        try {
+                            id = database.insertOrThrow(DATABASE_TABLES[0], Gravity_Sensor.DEVICE_ID, v);
+                        } catch (SQLException e) {
+                            id = database.replace(DATABASE_TABLES[0], Gravity_Sensor.DEVICE_ID, v);
+                        }
+                        if (id <= 0) {
+                            Log.w(Barometer.TAG, "Failed to insert/replace row into " + uri);
+                        } else {
+                            count++;
+                        }
                     }
-                    if (id <= 0) {
-                        Log.w(Barometer.TAG, "Failed to insert/replace row into " + uri);
-                    } else {
-                        count++;
+                    break;
+                case SENSOR_DATA:
+                    for (ContentValues v : values) {
+                        long id;
+                        try {
+                            id = database.insertOrThrow(DATABASE_TABLES[1], Gravity_Data.DEVICE_ID, v);
+                        } catch (SQLException e) {
+                            id = database.replace(DATABASE_TABLES[1], Gravity_Data.DEVICE_ID, v);
+                        }
+                        if (id <= 0) {
+                            Log.w(Barometer.TAG, "Failed to insert/replace row into " + uri);
+                        } else {
+                            count++;
+                        }
                     }
-                }
-                break;
-            case SENSOR_DATA:
-                for (ContentValues v : values) {
-                    long id;
-                    try {
-                        id = database.insertOrThrow(DATABASE_TABLES[1], Gravity_Data.DEVICE_ID, v);
-                    } catch (SQLException e) {
-                        id = database.replace(DATABASE_TABLES[1], Gravity_Data.DEVICE_ID, v);
-                    }
-                    if (id <= 0) {
-                        Log.w(Barometer.TAG, "Failed to insert/replace row into " + uri);
-                    } else {
-                        count++;
-                    }
-                }
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-
-        return count;
     }
 
     /**
@@ -331,7 +326,6 @@ public class Gravity_Provider extends ContentProvider {
         sensorDataMap.put(Gravity_Data.VALUES_1, Gravity_Data.VALUES_1);
         sensorDataMap.put(Gravity_Data.VALUES_2, Gravity_Data.VALUES_2);
         sensorDataMap.put(Gravity_Data.ACCURACY, Gravity_Data.ACCURACY);
-        sensorDataMap.put(Gravity_Data.LABEL, Gravity_Data.LABEL);
 
         return true;
     }
@@ -368,7 +362,7 @@ public class Gravity_Provider extends ContentProvider {
             if (Aware.DEBUG)
                 Log.e(Aware.TAG, e.getMessage());
 
-            return null;
+            throw e;
         }
     }
 
@@ -381,27 +375,26 @@ public class Gravity_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count;
-        switch (sUriMatcher.match(uri)) {
-            case SENSOR_DEV:
-                count = database.update(DATABASE_TABLES[0], values, selection,
-                        selectionArgs);
-                break;
-            case SENSOR_DATA:
-                count = database.update(DATABASE_TABLES[1], values, selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count;
+            switch (sUriMatcher.match(uri)) {
+                case SENSOR_DEV:
+                    count = database.update(DATABASE_TABLES[0], values, selection,
+                            selectionArgs);
+                    break;
+                case SENSOR_DATA:
+                    count = database.update(DATABASE_TABLES[1], values, selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 }

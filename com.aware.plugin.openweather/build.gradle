@@ -1,2 +1,5 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
-apply from: '/aware-core/aware.gradle'
+// Was an absolute path ('/aware-core/aware.gradle', i.e. filesystem root) that could only ever
+// resolve by coincidence. This module isn't currently included from settings.gradle so it was
+// never actually evaluated, but fixing the path so it's not a landmine if it's wired back in.
+apply from: '../aware-core/aware.gradle'

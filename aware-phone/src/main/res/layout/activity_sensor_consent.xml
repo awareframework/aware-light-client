@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Post-join consent screen. Lists the sensors this study enabled that need a runtime permission,
+    one per row, each with an Enable button (or "Granted ✓"). Continue proceeds to the app.
+    Rows are inflated at runtime from SensorCollection.enabledConsents().
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingLeft="20dp"
+    android:paddingRight="20dp"
+    android:paddingTop="24dp"
+    android:paddingBottom="16dp">
+
+    <TextView
+        android:id="@+id/consent_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Permissions this study needs"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/consent_subtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Enable the sensors you agree to share. Enabling is optional — you can continue without enabling any, and turn a sensor on later from its entry in the sensor list. You can also change these in system settings."
+        android:textSize="14sp"
+        android:textColor="?android:attr/textColorSecondary" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="16dp">
+
+        <LinearLayout
+            android:id="@+id/consent_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <Button
+        android:id="@+id/btn_continue"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="Continue" />
+
+    <Button
+        android:id="@+id/btn_dont_join"
+        style="?android:attr/borderlessButtonStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Don't join this study"
+        android:textColor="?android:attr/textColorSecondary" />
+</LinearLayout>

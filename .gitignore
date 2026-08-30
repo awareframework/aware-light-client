@@ -5,5 +5,11 @@ aware-phone/release/*
 .DS_Store
 .DS_Store?
 local.properties
+
+# Built release APKs: these are build output, not source, and were being committed on every
+# rebuild (~6MB each x 5 ABI variants) — see resources/ below, which had 15 revisions across them
+# bloating .git well past what removing the current copies alone would show.
+*.apk
+
 *.jks
 *.keystore

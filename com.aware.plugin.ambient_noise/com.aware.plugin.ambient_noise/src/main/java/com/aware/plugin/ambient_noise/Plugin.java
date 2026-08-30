@@ -3,17 +3,16 @@ package com.aware.plugin.ambient_noise;
 import android.Manifest;
 import android.accounts.Account;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SyncRequest;
 import android.os.Build;
 import android.os.Bundle;
-import android.widget.Toast;
 import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
-import com.aware.ui.PermissionsHandler;
 import com.aware.utils.Aware_Plugin;
 import com.aware.utils.PluginsManager;
 import com.aware.utils.Scheduler;
@@ -38,25 +37,9 @@ public class Plugin extends Aware_Plugin {
         REQUIRED_PERMISSIONS.add(Manifest.permission.RECORD_AUDIO);
         REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         REQUIRED_PERMISSIONS.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-
-        if (checkAndRequestPermissions()) {
-            Log.d(TAG, "Permissions OK, initializing plugin");
-            initializePlugin();
-        } else {
-            Log.d(TAG, "Permissions not granted yet");
-        }
-    }
-
-    private boolean checkAndRequestPermissions() {
-        if (!PERMISSIONS_OK) {
-            Log.d(TAG, "Requesting permissions...");
-            Intent permissions = new Intent(this, PermissionsHandler.class);
-            permissions.putExtra(PermissionsHandler.EXTRA_REQUIRED_PERMISSIONS, REQUIRED_PERMISSIONS);
-            permissions.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(permissions);
-            return false;
-        }
-        return true;
+        // Runtime permission prompts belong to the visible consent flow. Launching an Activity
+        // from this background plugin caused one more dialog/restart loop during all-sensor updates.
+        initializePlugin();
     }
 
     @Override
@@ -67,7 +50,7 @@ public class Plugin extends Aware_Plugin {
 
             DEBUG = Aware.getSetting(this, Aware_Preferences.DEBUG_FLAG).equals("true");
 
-            initializeSettings();
+            initializeSettings(getApplicationContext());
 
             setupScheduler();
 
@@ -87,24 +70,30 @@ public class Plugin extends Aware_Plugin {
 
 
 
-    private void initializeSettings() {
-        if (Aware.getSetting(getApplicationContext(), Settings.FREQUENCY_PLUGIN_AMBIENT_NOISE).isEmpty()) {
-            Aware.setSetting(getApplicationContext(), Settings.FREQUENCY_PLUGIN_AMBIENT_NOISE, 5);
+    /**
+     * Ensures the plugin's own settings have a value, defaulting any that are empty. Shared with
+     * AudioAnalyser (a separate IntentService triggered directly by the Scheduler, not through this
+     * Service's onStartCommand()) so both read from the same single source of truth for defaults
+     * instead of duplicating the literals.
+     */
+    static void initializeSettings(Context context) {
+        if (Aware.getSetting(context, Settings.FREQUENCY_PLUGIN_AMBIENT_NOISE).isEmpty()) {
+            Aware.setSetting(context, Settings.FREQUENCY_PLUGIN_AMBIENT_NOISE, 5);
         }
-        if (Aware.getSetting(getApplicationContext(), Settings.PLUGIN_AMBIENT_NOISE_SAMPLE_SIZE).isEmpty()) {
-            Aware.setSetting(getApplicationContext(), Settings.PLUGIN_AMBIENT_NOISE_SAMPLE_SIZE, 30);
+        if (Aware.getSetting(context, Settings.PLUGIN_AMBIENT_NOISE_SAMPLE_SIZE).isEmpty()) {
+            Aware.setSetting(context, Settings.PLUGIN_AMBIENT_NOISE_SAMPLE_SIZE, 30);
         }
-        if (Aware.getSetting(getApplicationContext(), Settings.PLUGIN_AMBIENT_NOISE_SILENCE_THRESHOLD).isEmpty()) {
-            Aware.setSetting(getApplicationContext(), Settings.PLUGIN_AMBIENT_NOISE_SILENCE_THRESHOLD, 50);
+        if (Aware.getSetting(context, Settings.PLUGIN_AMBIENT_NOISE_SILENCE_THRESHOLD).isEmpty()) {
+            Aware.setSetting(context, Settings.PLUGIN_AMBIENT_NOISE_SILENCE_THRESHOLD, 50);
         }
     }
 
     private void setupScheduler() {
         try {
             Scheduler.Schedule audioSampler = Scheduler.getSchedule(this, SCHEDULER_PLUGIN_AMBIENT_NOISE);
-            if (audioSampler == null || audioSampler.getInterval() != Long.parseLong(Aware.getSetting(this, Settings.FREQUENCY_PLUGIN_AMBIENT_NOISE))) {
+            if (audioSampler == null || audioSampler.getInterval() != Aware.getSettingAsLong(this, Settings.FREQUENCY_PLUGIN_AMBIENT_NOISE, 5)) {
                 audioSampler = new Scheduler.Schedule(SCHEDULER_PLUGIN_AMBIENT_NOISE)
-                        .setInterval(Long.parseLong(Aware.getSetting(this, Settings.FREQUENCY_PLUGIN_AMBIENT_NOISE)))
+                        .setInterval(Aware.getSettingAsLong(this, Settings.FREQUENCY_PLUGIN_AMBIENT_NOISE, 5))
                         .setActionType(Scheduler.ACTION_TYPE_SERVICE)
                         .setActionClass(getPackageName() + "/" + AudioAnalyser.class.getName());
                 Scheduler.saveSchedule(this, audioSampler);
@@ -126,7 +115,7 @@ public class Plugin extends Aware_Plugin {
                 ContentResolver.setSyncAutomatically(aware_account, authority, true);
 
                 if (Aware.isStudy(this)) {
-                    long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                    long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
 
                     SyncRequest request = new SyncRequest.Builder()
                             .syncPeriodic(frequency, frequency / 3)

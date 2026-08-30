@@ -1,16 +1,12 @@
 
 package com.aware;
 
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.database.Cursor;
-import android.database.SQLException;
-import android.database.sqlite.SQLiteException;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -26,9 +22,8 @@ import com.aware.providers.Magnetometer_Provider;
 import com.aware.providers.Magnetometer_Provider.Magnetometer_Data;
 import com.aware.providers.Magnetometer_Provider.Magnetometer_Sensor;
 import com.aware.utils.Aware_Sensor;
-
-import java.util.ArrayList;
-import java.util.List;
+import com.aware.utils.SensorDataBuffer;
+import com.aware.utils.SensorTimeUnits;
 
 /**
  * AWARE Magnetometer module
@@ -65,27 +60,12 @@ public class Magnetometer extends Aware_Sensor implements SensorEventListener {
      * ContentProvider: MagnetometerProvider
      */
     public static final String ACTION_AWARE_MAGNETOMETER = "ACTION_AWARE_MAGNETOMETER";
-    public static final String ACTION_AWARE_MAGNETOMETER_LABEL = "ACTION_AWARE_MAGNETOMETER_LABEL";
-    public static final String EXTRA_LABEL = "label";
 
     /**
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
-    private List<ContentValues> data_values = new ArrayList<ContentValues>();
-
-    private static String LABEL = "";
-
-    private static DataLabel dataLabeler = new DataLabel();
-
-    public static class DataLabel extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_AWARE_MAGNETOMETER_LABEL)) {
-                LABEL = intent.getStringExtra(EXTRA_LABEL);
-            }
-        }
-    }
+    private SensorDataBuffer dataBuffer;
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -99,53 +79,38 @@ public class Magnetometer extends Aware_Sensor implements SensorEventListener {
             return;
         if (LAST_VALUES != null && THRESHOLD > 0 &&
                 Math.abs(event.values[0] - LAST_VALUES[0]) < THRESHOLD &&
-                Math.abs(event.values[0] - LAST_VALUES[1]) < THRESHOLD &&
-                Math.abs(event.values[0] - LAST_VALUES[2]) < THRESHOLD) {
+                Math.abs(event.values[1] - LAST_VALUES[1]) < THRESHOLD &&
+                Math.abs(event.values[2] - LAST_VALUES[2]) < THRESHOLD) {
             return;
         }
 
         LAST_VALUES = new Float[]{event.values[0], event.values[1], event.values[2]};
 
         ContentValues rowData = new ContentValues();
-        rowData.put(Magnetometer_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+        rowData.put(Magnetometer_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
         rowData.put(Magnetometer_Data.TIMESTAMP, TS);
         rowData.put(Magnetometer_Data.VALUES_0, event.values[0]);
         rowData.put(Magnetometer_Data.VALUES_1, event.values[1]);
         rowData.put(Magnetometer_Data.VALUES_2, event.values[2]);
         rowData.put(Magnetometer_Data.ACCURACY, event.accuracy);
-        rowData.put(Magnetometer_Data.LABEL, LABEL);
 
         if (awareSensor != null) awareSensor.onMagnetometerChanged(rowData);
 
-        data_values.add(rowData);
+        boolean buffered = dataBuffer.add(rowData);
         LAST_TS = TS;
+        if (!buffered) return;
 
-        if (data_values.size() < 250 && TS < LAST_SAVE + 300000) {
+        if (dataBuffer.size() < SensorDataBuffer.BATCH_SIZE && TS < LAST_SAVE + 300000) {
             return;
         }
 
-        final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-        data_values.toArray(data_buffer);
-
-        try {
-            if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        getContentResolver().bulkInsert(Magnetometer_Provider.Magnetometer_Data.CONTENT_URI, data_buffer);
-
-                        Intent newData = new Intent(ACTION_AWARE_MAGNETOMETER);
-                        sendBroadcast(newData);
-                    }
-                }).run();
-            }
-        } catch (SQLiteException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-        } catch (SQLException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        if (dataBuffer.flush(isDatabaseWriteSuppressed())) {
+            LAST_SAVE = TS;
         }
-        data_values.clear();
-        LAST_SAVE = TS;
+    }
+
+    private boolean isDatabaseWriteSuppressed() {
+        return Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true");
     }
 
     private static Magnetometer.AWARESensorObserver awareSensor;
@@ -183,7 +148,7 @@ public class Magnetometer extends Aware_Sensor implements SensorEventListener {
         Cursor sensorInfo = getContentResolver().query(Magnetometer_Sensor.CONTENT_URI, null, null, null, null);
         if (sensorInfo == null || !sensorInfo.moveToFirst()) {
             ContentValues rowData = new ContentValues();
-            rowData.put(Magnetometer_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+            rowData.put(Magnetometer_Sensor.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
             rowData.put(Magnetometer_Sensor.TIMESTAMP, System.currentTimeMillis());
             rowData.put(Magnetometer_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
             rowData.put(Magnetometer_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
@@ -206,6 +171,7 @@ public class Magnetometer extends Aware_Sensor implements SensorEventListener {
         super.onCreate();
 
         AUTHORITY = Magnetometer_Provider.getAuthority(this);
+        dataBuffer = new SensorDataBuffer(this, Magnetometer_Data.CONTENT_URI, ACTION_AWARE_MAGNETOMETER, TAG);
 
         mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         mMagnetometer = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
@@ -219,10 +185,6 @@ public class Magnetometer extends Aware_Sensor implements SensorEventListener {
 
         sensorHandler = new Handler(sensorThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_AWARE_MAGNETOMETER_LABEL);
-        registerReceiver(dataLabeler, filter);
-
         if (Aware.DEBUG) Log.d(TAG, "Magnetometer service created!");
     }
 
@@ -233,10 +195,9 @@ public class Magnetometer extends Aware_Sensor implements SensorEventListener {
         sensorHandler.removeCallbacksAndMessages(null);
         mSensorManager.unregisterListener(this, mMagnetometer);
         sensorThread.quit();
+        dataBuffer.close(isDatabaseWriteSuppressed());
 
         wakeLock.release();
-
-        unregisterReceiver(dataLabeler);
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Magnetometer_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(
@@ -260,18 +221,28 @@ public class Magnetometer extends Aware_Sensor implements SensorEventListener {
             } else {
                 DEBUG = Aware.getSetting(this, Aware_Preferences.DEBUG_FLAG).equals("true");
                 Aware.setSetting(this, Aware_Preferences.STATUS_MAGNETOMETER, true);
-                saveSensorDevice(mMagnetometer);
+                // Opening this provider can include a one-time schema migration. A long-running
+                // study can accumulate a multi-gigabyte magnetometer table, so never make provider
+                // startup part of onStartCommand's main-thread work. The provider serializes its
+                // own queries/inserts, so sensor writes safely wait for the migration.
+                final Sensor magnetometer = mMagnetometer;
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        saveSensorDevice(magnetometer);
+                    }
+                }, TAG + "::database").start();
 
                 if (Aware.getSetting(this, Aware_Preferences.FREQUENCY_MAGNETOMETER).length() == 0) {
-                    Aware.setSetting(this, Aware_Preferences.FREQUENCY_MAGNETOMETER, 200000);
+                    Aware.setSetting(this, Aware_Preferences.FREQUENCY_MAGNETOMETER, 50000);
                 }
 
                 if (Aware.getSetting(this, Aware_Preferences.THRESHOLD_MAGNETOMETER).length() == 0) {
                     Aware.setSetting(this, Aware_Preferences.THRESHOLD_MAGNETOMETER, 0.0);
                 }
 
-                int new_frequency = Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_MAGNETOMETER));
-                double new_threshold = Double.parseDouble(Aware.getSetting(getApplicationContext(), Aware_Preferences.THRESHOLD_MAGNETOMETER));
+                int new_frequency = Aware.getSettingAsInt(getApplicationContext(), Aware_Preferences.FREQUENCY_MAGNETOMETER, 50000);
+                double new_threshold = Aware.getSettingAsDouble(getApplicationContext(), Aware_Preferences.THRESHOLD_MAGNETOMETER, 0.0);
                 boolean new_enforce_frequency = (Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_MAGNETOMETER_ENFORCE).equals("true")
                         || Aware.getSetting(getApplicationContext(), Aware_Preferences.ENFORCE_FREQUENCY_ALL).equals("true"));
 
@@ -287,7 +258,7 @@ public class Magnetometer extends Aware_Sensor implements SensorEventListener {
                     ENFORCE_FREQUENCY = new_enforce_frequency;
                 }
 
-                mSensorManager.registerListener(this, mMagnetometer, Integer.parseInt(Aware.getSetting(this, Aware_Preferences.FREQUENCY_MAGNETOMETER)), sensorHandler);
+                mSensorManager.registerListener(this, mMagnetometer, SensorTimeUnits.samplingPeriodUs(new_frequency), sensorHandler);
                 LAST_SAVE = System.currentTimeMillis();
 
                 if (Aware.DEBUG) Log.d(TAG, "Magnetometer service active...");
@@ -295,7 +266,7 @@ public class Magnetometer extends Aware_Sensor implements SensorEventListener {
                 if (Aware.isStudy(this)) {
                     ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Magnetometer_Provider.getAuthority(this), 1);
                     ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Magnetometer_Provider.getAuthority(this), true);
-                    long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                    long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                     SyncRequest request = new SyncRequest.Builder()
                             .syncPeriodic(frequency, frequency / 3)
                             .setSyncAdapter(Aware.getAWAREAccount(this), Magnetometer_Provider.getAuthority(this))

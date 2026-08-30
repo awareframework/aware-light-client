@@ -1,16 +1,12 @@
 
 package com.aware;
 
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.database.Cursor;
-import android.database.SQLException;
-import android.database.sqlite.SQLiteException;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -26,9 +22,8 @@ import com.aware.providers.Gravity_Provider;
 import com.aware.providers.Gravity_Provider.Gravity_Data;
 import com.aware.providers.Gravity_Provider.Gravity_Sensor;
 import com.aware.utils.Aware_Sensor;
-
-import java.util.ArrayList;
-import java.util.List;
+import com.aware.utils.SensorDataBuffer;
+import com.aware.utils.SensorTimeUnits;
 
 /**
  * AWARE Gravity module
@@ -64,27 +59,12 @@ public class Gravity extends Aware_Sensor implements SensorEventListener {
      * ContentProvider: Gravity_Provider
      */
     public static final String ACTION_AWARE_GRAVITY = "ACTION_AWARE_GRAVITY";
-    public static final String ACTION_AWARE_GRAVITY_LABEL = "ACTION_AWARE_GRAVITY_LABEL";
-    public static final String EXTRA_LABEL = "label";
 
     /**
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
-    private List<ContentValues> data_values = new ArrayList<ContentValues>();
-
-    private static String LABEL = "";
-
-    private static DataLabel dataLabeler = new DataLabel();
-
-    public static class DataLabel extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_AWARE_GRAVITY_LABEL)) {
-                LABEL = intent.getStringExtra(EXTRA_LABEL);
-            }
-        }
-    }
+    private SensorDataBuffer dataBuffer;
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -94,28 +74,7 @@ public class Gravity extends Aware_Sensor implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (SignificantMotion.isSignificantMotionActive && !SignificantMotion.CURRENT_SIGMOTION_STATE) {
-            if (data_values.size() > 0) {
-                final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-                data_values.toArray(data_buffer);
-                try {
-                    if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                getContentResolver().bulkInsert(Gravity_Provider.Gravity_Data.CONTENT_URI, data_buffer);
-
-                                Intent newData = new Intent(ACTION_AWARE_GRAVITY);
-                                sendBroadcast(newData);
-                            }
-                        }).run();
-                    }
-                } catch (SQLiteException e) {
-                    if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-                } catch (SQLException e) {
-                    if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-                }
-                data_values.clear();
-            }
+            dataBuffer.flush(isDatabaseWriteSuppressed());
             return;
         }
 
@@ -131,45 +90,30 @@ public class Gravity extends Aware_Sensor implements SensorEventListener {
         LAST_VALUES = new Float[]{event.values[0], event.values[1], event.values[2]};
 
         ContentValues rowData = new ContentValues();
-        rowData.put(Gravity_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+        rowData.put(Gravity_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
         rowData.put(Gravity_Data.TIMESTAMP, TS);
         rowData.put(Gravity_Data.VALUES_0, event.values[0]);
         rowData.put(Gravity_Data.VALUES_1, event.values[1]);
         rowData.put(Gravity_Data.VALUES_2, event.values[2]);
         rowData.put(Gravity_Data.ACCURACY, event.accuracy);
-        rowData.put(Gravity_Data.LABEL, LABEL);
 
         if (awareSensor != null) awareSensor.onGravityChanged(rowData);
 
-        data_values.add(rowData);
+        boolean buffered = dataBuffer.add(rowData);
         LAST_TS = TS;
+        if (!buffered) return;
 
-        if (data_values.size() < 250 && TS < LAST_SAVE + 300000) {
+        if (dataBuffer.size() < SensorDataBuffer.BATCH_SIZE && TS < LAST_SAVE + 300000) {
             return;
         }
 
-        final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-        data_values.toArray(data_buffer);
-
-        try {
-            if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        getContentResolver().bulkInsert(Gravity_Provider.Gravity_Data.CONTENT_URI, data_buffer);
-
-                        Intent newData = new Intent(ACTION_AWARE_GRAVITY);
-                        sendBroadcast(newData);
-                    }
-                }).run();
-            }
-        } catch (SQLiteException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-        } catch (SQLException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        if (dataBuffer.flush(isDatabaseWriteSuppressed())) {
+            LAST_SAVE = TS;
         }
-        data_values.clear();
-        LAST_SAVE = TS;
+    }
+
+    private boolean isDatabaseWriteSuppressed() {
+        return Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true");
     }
 
     private static Gravity.AWARESensorObserver awareSensor;
@@ -207,7 +151,7 @@ public class Gravity extends Aware_Sensor implements SensorEventListener {
         Cursor sensorInfo = getContentResolver().query(Gravity_Sensor.CONTENT_URI, null, null, null, null);
         if (sensorInfo == null || !sensorInfo.moveToFirst()) {
             ContentValues rowData = new ContentValues();
-            rowData.put(Gravity_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+            rowData.put(Gravity_Sensor.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
             rowData.put(Gravity_Sensor.TIMESTAMP, System.currentTimeMillis());
             rowData.put(Gravity_Sensor.MAXIMUM_RANGE, sensor.getMaximumRange());
             rowData.put(Gravity_Sensor.MINIMUM_DELAY, sensor.getMinDelay());
@@ -230,6 +174,7 @@ public class Gravity extends Aware_Sensor implements SensorEventListener {
         super.onCreate();
 
         AUTHORITY = Gravity_Provider.getAuthority(this);
+        dataBuffer = new SensorDataBuffer(this, Gravity_Data.CONTENT_URI, ACTION_AWARE_GRAVITY, TAG);
 
         mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         mGravity = mSensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY);
@@ -243,10 +188,6 @@ public class Gravity extends Aware_Sensor implements SensorEventListener {
 
         sensorHandler = new Handler(sensorThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_AWARE_GRAVITY_LABEL);
-        registerReceiver(dataLabeler, filter);
-
         if (Aware.DEBUG) Log.d(TAG, "Gravity service created!");
     }
 
@@ -258,10 +199,9 @@ public class Gravity extends Aware_Sensor implements SensorEventListener {
         mSensorManager.unregisterListener(this, mGravity);
 
         sensorThread.quit();
+        dataBuffer.close(isDatabaseWriteSuppressed());
 
         wakeLock.release();
-
-        unregisterReceiver(dataLabeler);
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Gravity_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(
@@ -287,15 +227,15 @@ public class Gravity extends Aware_Sensor implements SensorEventListener {
                 saveSensorDevice(mGravity);
 
                 if (Aware.getSetting(this, Aware_Preferences.FREQUENCY_GRAVITY).length() == 0) {
-                    Aware.setSetting(this, Aware_Preferences.FREQUENCY_GRAVITY, 200000);
+                    Aware.setSetting(this, Aware_Preferences.FREQUENCY_GRAVITY, 20000);
                 }
 
                 if (Aware.getSetting(this, Aware_Preferences.THRESHOLD_GRAVITY).length() == 0) {
                     Aware.setSetting(this, Aware_Preferences.THRESHOLD_GRAVITY, 0.0);
                 }
 
-                int new_frequency = Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_GRAVITY));
-                double new_threshold = Double.parseDouble(Aware.getSetting(getApplicationContext(), Aware_Preferences.THRESHOLD_GRAVITY));
+                int new_frequency = Aware.getSettingAsInt(getApplicationContext(), Aware_Preferences.FREQUENCY_GRAVITY, 20000);
+                double new_threshold = Aware.getSettingAsDouble(getApplicationContext(), Aware_Preferences.THRESHOLD_GRAVITY, 0.0);
                 boolean new_enforce_frequency = (Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_GRAVITY_ENFORCE).equals("true")
                         || Aware.getSetting(getApplicationContext(), Aware_Preferences.ENFORCE_FREQUENCY_ALL).equals("true"));
 
@@ -311,7 +251,7 @@ public class Gravity extends Aware_Sensor implements SensorEventListener {
                     ENFORCE_FREQUENCY = new_enforce_frequency;
                 }
 
-                mSensorManager.registerListener(this, mGravity, Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_GRAVITY)), sensorHandler);
+                mSensorManager.registerListener(this, mGravity, SensorTimeUnits.samplingPeriodUs(new_frequency), sensorHandler);
                 LAST_SAVE = System.currentTimeMillis();
 
                 if (Aware.DEBUG) Log.d(TAG, "Gravity service active: " + FREQUENCY + "ms");
@@ -319,7 +259,7 @@ public class Gravity extends Aware_Sensor implements SensorEventListener {
                 if (Aware.isStudy(this)) {
                     ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Gravity_Provider.getAuthority(this), 1);
                     ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Gravity_Provider.getAuthority(this), true);
-                    long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                    long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                     SyncRequest request = new SyncRequest.Builder()
                             .syncPeriodic(frequency, frequency / 3)
                             .setSyncAdapter(Aware.getAWAREAccount(this), Gravity_Provider.getAuthority(this))

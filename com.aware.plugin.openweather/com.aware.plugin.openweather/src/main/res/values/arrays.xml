@@ -8,4 +8,15 @@
         <item >metric</item>
         <item >imperial</item>
     </string-array>
+
+    <string-array name="weather_frequency_values">
+        <item>15</item>
+        <item>30</item>
+        <item>60</item>
+    </string-array>
+    <string-array name="weather_frequency_readable">
+        <item>Responsive local-weather context (every 15 min)</item>
+        <item>Standard (every 30 min)</item>
+        <item>Minimal footprint (every 60 min)</item>
+    </string-array>
 </resources>

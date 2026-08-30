@@ -8,11 +8,10 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
-import androidx.core.content.PermissionChecker;
+import android.content.pm.PackageManager;
+import androidx.core.content.ContextCompat;
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
-import com.aware.ui.PermissionsHandler;
-
 import java.util.ArrayList;
 
 /**
@@ -79,7 +78,9 @@ public class Aware_Plugin extends Service {
         registerReceiver(contextBroadcaster, filter);
 
         REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-        REQUIRED_PERMISSIONS.add(Manifest.permission.GET_ACCOUNTS);
+        // GET_ACCOUNTS is only needed below API 26 -- see the comment in ui/Aware_Client.java.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O)
+            REQUIRED_PERMISSIONS.add(Manifest.permission.GET_ACCOUNTS);
         REQUIRED_PERMISSIONS.add(Manifest.permission.WRITE_SYNC_SETTINGS);
         REQUIRED_PERMISSIONS.add(Manifest.permission.READ_SYNC_SETTINGS);
         REQUIRED_PERMISSIONS.add(Manifest.permission.READ_SYNC_STATS);
@@ -92,7 +93,7 @@ public class Aware_Plugin extends Service {
         PERMISSIONS_OK = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             for (String p : REQUIRED_PERMISSIONS) {
-                if (PermissionChecker.checkSelfPermission(this, p) != PermissionChecker.PERMISSION_GRANTED) {
+                if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
                     PERMISSIONS_OK = false;
                     break;
                 }
@@ -100,11 +101,13 @@ public class Aware_Plugin extends Service {
         }
 
         if (!PERMISSIONS_OK) {
-            Intent permissions = new Intent(this, PermissionsHandler.class);
-            permissions.putExtra(PermissionsHandler.EXTRA_REQUIRED_PERMISSIONS, REQUIRED_PERMISSIONS);
-            permissions.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            permissions.putExtra(PermissionsHandler.EXTRA_REDIRECT_SERVICE, getApplicationContext().getPackageName() + "/" + getClass().getName()); //restarts plugin once permissions are accepted
-            startActivity(permissions);
+            // Permission requests must come from visible, participant-initiated consent/settings UI.
+            // Several plugins and sensors can start together after a config update; allowing each
+            // service to launch PermissionsHandler stacks dialogs and creates denial/restart loops.
+            Log.w(Aware.TAG, "Not starting " + getClass().getName()
+                    + ": required permission is missing; waiting for participant consent");
+            stopSelf(startId);
+            return START_NOT_STICKY;
         } else {
 
             PERMISSIONS_OK = true;

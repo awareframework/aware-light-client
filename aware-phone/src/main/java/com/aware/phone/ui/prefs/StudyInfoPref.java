@@ -1,19 +1,17 @@
 package com.aware.phone.ui.prefs;
 
+import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
+import android.database.DatabaseUtils;
 import android.preference.Preference;
-import android.text.Html;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.TextView;
 
 import com.aware.Aware;
-import com.aware.Aware_Preferences;
 import com.aware.phone.R;
-import com.aware.providers.Aware_Provider;
 
 public class StudyInfoPref extends Preference {
 
@@ -38,22 +36,17 @@ public class StudyInfoPref extends Preference {
         super.onCreateView(parent);
         LayoutInflater inflater = (LayoutInflater) getContext().getSystemService(
                 Context.LAYOUT_INFLATER_SERVICE);
-        View view = inflater.inflate(R.layout.pref_study_info, parent, false);
+        View view = inflater.inflate(R.layout.study_card, parent, false);
 
-        TextView tvStudyName = view.findViewById(R.id.study_name);
-        TextView tvStudyDesc = view.findViewById(R.id.study_description);
-        TextView tvStudyContact = view.findViewById(R.id.study_contact);
-
-        Cursor study = Aware.getStudy(getContext(),
-                Aware.getSetting(getContext(), Aware_Preferences.WEBSERVICE_SERVER));
+        // Use the currently-enrolled study, independent of the WEBSERVICE_SERVER setting
+        // (which can drift from the study URL after a reset). See Aware.getActiveStudy().
+        Cursor study = Aware.getActiveStudy(getContext());
         if (study != null && study.moveToFirst()) {
-            tvStudyName.setText(study.getString(
-                    study.getColumnIndex(Aware_Provider.Aware_Studies.STUDY_TITLE)));
-            tvStudyDesc.setText(Html.fromHtml(study.getString(study.getColumnIndex(
-                    Aware_Provider.Aware_Studies.STUDY_DESCRIPTION)), null, null));
-            tvStudyContact.setText(study.getString(study.getColumnIndex(
-                    Aware_Provider.Aware_Studies.STUDY_PI)));
+            ContentValues row = new ContentValues();
+            DatabaseUtils.cursorRowToContentValues(study, row);
+            StudyCard.bind(getContext(), view, row);
         }
+        if (study != null && !study.isClosed()) study.close();
 
         return view;
     }

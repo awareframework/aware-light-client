@@ -16,6 +16,7 @@ import android.util.Log;
 
 import com.aware.Aware;
 import com.aware.utils.DatabaseHelper;
+import com.aware.utils.DatabaseTransaction;
 
 import java.util.HashMap;
 
@@ -95,24 +96,23 @@ public class Network_Provider extends ContentProvider {
         initialiseDatabase();
 
         //lock database for transaction
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case NETWORK:
-                count = database.delete(DATABASE_TABLES[0], selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case NETWORK:
+                    count = database.delete(DATABASE_TABLES[0], selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 
     @Override
@@ -137,25 +137,23 @@ public class Network_Provider extends ContentProvider {
 
         ContentValues values = (initialValues != null) ? new ContentValues(initialValues) : new ContentValues();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        switch (sUriMatcher.match(uri)) {
-            case NETWORK:
-                long network_id = database.insertWithOnConflict(DATABASE_TABLES[0],
-                        Network_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
-                database.setTransactionSuccessful();
-                database.endTransaction();
-                if (network_id > 0) {
-                    Uri networkUri = ContentUris.withAppendedId(
-                            Network_Data.CONTENT_URI, network_id);
-                    getContext().getContentResolver().notifyChange(networkUri, null, false);
-                    return networkUri;
-                }
-                database.endTransaction();
-                throw new SQLException("Failed to insert row into " + uri);
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            switch (sUriMatcher.match(uri)) {
+                case NETWORK:
+                    long network_id = database.insertWithOnConflict(DATABASE_TABLES[0],
+                            Network_Data.DEVICE_ID, values, SQLiteDatabase.CONFLICT_IGNORE);
+                    transaction.commit();
+                    if (network_id > 0) {
+                        Uri networkUri = ContentUris.withAppendedId(
+                                Network_Data.CONTENT_URI, network_id);
+                        getContext().getContentResolver().notifyChange(networkUri, null, false);
+                        return networkUri;
+                    }
+                    throw new SQLException("Failed to insert row into " + uri);
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
         }
     }
 
@@ -220,7 +218,7 @@ public class Network_Provider extends ContentProvider {
             if (Aware.DEBUG)
                 Log.e(Aware.TAG, e.getMessage());
 
-            return null;
+            throw e;
         }
     }
 
@@ -233,23 +231,22 @@ public class Network_Provider extends ContentProvider {
 
         initialiseDatabase();
 
-        database.beginTransaction();
+        try (DatabaseTransaction transaction = DatabaseTransaction.begin(database)) {
 
-        int count = 0;
-        switch (sUriMatcher.match(uri)) {
-            case NETWORK:
-                count = database.update(DATABASE_TABLES[0], values, selection,
-                        selectionArgs);
-                break;
-            default:
-                database.endTransaction();
-                throw new IllegalArgumentException("Unknown URI " + uri);
+            int count = 0;
+            switch (sUriMatcher.match(uri)) {
+                case NETWORK:
+                    count = database.update(DATABASE_TABLES[0], values, selection,
+                            selectionArgs);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown URI " + uri);
+            }
+
+            transaction.commit();
+
+            getContext().getContentResolver().notifyChange(uri, null, false);
+            return count;
         }
-
-        database.setTransactionSuccessful();
-        database.endTransaction();
-
-        getContext().getContentResolver().notifyChange(uri, null, false);
-        return count;
     }
 }

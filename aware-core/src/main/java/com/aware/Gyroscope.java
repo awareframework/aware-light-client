@@ -1,16 +1,12 @@
 
 package com.aware;
 
-import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SyncRequest;
 import android.database.Cursor;
-import android.database.SQLException;
-import android.database.sqlite.SQLiteException;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -26,9 +22,8 @@ import com.aware.providers.Gyroscope_Provider;
 import com.aware.providers.Gyroscope_Provider.Gyroscope_Data;
 import com.aware.providers.Gyroscope_Provider.Gyroscope_Sensor;
 import com.aware.utils.Aware_Sensor;
-
-import java.util.ArrayList;
-import java.util.List;
+import com.aware.utils.SensorDataBuffer;
+import com.aware.utils.SensorTimeUnits;
 
 /**
  * Service that logs gyroscope readings from the device
@@ -66,27 +61,11 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
     public static final String EXTRA_SENSOR = "sensor";
     public static final String EXTRA_DATA = "data";
 
-    public static final String ACTION_AWARE_GYROSCOPE_LABEL = "ACTION_AWARE_GYROSCOPE_LABEL";
-    public static final String EXTRA_LABEL = "label";
-
     /**
      * Until today, no available Android phone samples higher than 208Hz (Nexus 7).
      * http://ilessendata.blogspot.com/2012/11/android-accelerometer-sampling-rates.html
      */
-    private List<ContentValues> data_values = new ArrayList<>();
-
-    private static String LABEL = "";
-
-    private static DataLabel dataLabeler = new DataLabel();
-
-    public static class DataLabel extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(ACTION_AWARE_GYROSCOPE_LABEL)) {
-                LABEL = intent.getStringExtra(EXTRA_LABEL);
-            }
-        }
-    }
+    private SensorDataBuffer dataBuffer;
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
@@ -96,29 +75,7 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (SignificantMotion.isSignificantMotionActive && !SignificantMotion.CURRENT_SIGMOTION_STATE) {
-            if (data_values.size() > 0) {
-                final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-                data_values.toArray(data_buffer);
-                try {
-                    if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                        new Thread(new Runnable() {
-                            @Override
-                            public void run() {
-                                getContentResolver().bulkInsert(Gyroscope_Provider.Gyroscope_Data.CONTENT_URI, data_buffer);
-
-                                Intent newData = new Intent(ACTION_AWARE_GYROSCOPE);
-                                sendBroadcast(newData);
-                            }
-                        }).run();
-                    }
-                } catch (SQLiteException e) {
-                    if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-                } catch (SQLException e) {
-                    if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-                }
-                data_values.clear();
-            }
-
+            dataBuffer.flush(isDatabaseWriteSuppressed());
             return;
         }
 
@@ -135,44 +92,30 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
 
         // Proceed with saving as usual.
         ContentValues rowData = new ContentValues();
-        rowData.put(Gyroscope_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+        rowData.put(Gyroscope_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
         rowData.put(Gyroscope_Data.TIMESTAMP, TS);
         rowData.put(Gyroscope_Data.VALUES_0, event.values[0]);
         rowData.put(Gyroscope_Data.VALUES_1, event.values[1]);
         rowData.put(Gyroscope_Data.VALUES_2, event.values[2]);
         rowData.put(Gyroscope_Data.ACCURACY, event.accuracy);
-        rowData.put(Gyroscope_Data.LABEL, LABEL);
 
         if (awareSensor != null) awareSensor.onGyroscopeChanged(rowData);
 
-        data_values.add(rowData);
+        boolean buffered = dataBuffer.add(rowData);
         LAST_TS = TS;
+        if (!buffered) return;
 
-        if (data_values.size() < 250 && TS < LAST_SAVE + 300000) {
+        if (dataBuffer.size() < SensorDataBuffer.BATCH_SIZE && TS < LAST_SAVE + 300000) {
             return;
         }
 
-        final ContentValues[] data_buffer = new ContentValues[data_values.size()];
-        data_values.toArray(data_buffer);
-        try {
-            if (!Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true")) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        getContentResolver().bulkInsert(Gyroscope_Provider.Gyroscope_Data.CONTENT_URI, data_buffer);
-
-                        Intent newData = new Intent(ACTION_AWARE_GYROSCOPE);
-                        sendBroadcast(newData);
-                    }
-                }).run();
-            }
-        } catch (SQLiteException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
-        } catch (SQLException e) {
-            if (Aware.DEBUG) Log.d(TAG, e.getMessage());
+        if (dataBuffer.flush(isDatabaseWriteSuppressed())) {
+            LAST_SAVE = TS;
         }
-        data_values.clear();
-        LAST_SAVE = TS;
+    }
+
+    private boolean isDatabaseWriteSuppressed() {
+        return Aware.getSetting(getApplicationContext(), Aware_Preferences.DEBUG_DB_SLOW).equals("true");
     }
 
     private static Gyroscope.AWARESensorObserver awareSensor;
@@ -210,7 +153,7 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
         Cursor gyroInfo = getContentResolver().query(Gyroscope_Sensor.CONTENT_URI, null, null, null, null);
         if (gyroInfo == null || !gyroInfo.moveToFirst()) {
             ContentValues rowData = new ContentValues();
-            rowData.put(Gyroscope_Sensor.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+            rowData.put(Gyroscope_Sensor.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
             rowData.put(Gyroscope_Sensor.TIMESTAMP, System.currentTimeMillis());
             rowData.put(Gyroscope_Sensor.MAXIMUM_RANGE, gyro.getMaximumRange());
             rowData.put(Gyroscope_Sensor.MINIMUM_DELAY, gyro.getMinDelay());
@@ -237,6 +180,7 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
         super.onCreate();
 
         AUTHORITY = Gyroscope_Provider.getAuthority(this);
+        dataBuffer = new SensorDataBuffer(this, Gyroscope_Data.CONTENT_URI, ACTION_AWARE_GYROSCOPE, TAG);
 
         mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
 
@@ -252,10 +196,6 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
 
         sensorHandler = new Handler(sensorThread.getLooper());
 
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(ACTION_AWARE_GYROSCOPE_LABEL);
-        registerReceiver(dataLabeler, filter);
-
         if (Aware.DEBUG) Log.d(TAG, "Gyroscope service created!");
     }
 
@@ -266,10 +206,9 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
         sensorHandler.removeCallbacksAndMessages(null);
         mSensorManager.unregisterListener(this, mGyroscope);
         sensorThread.quit();
+        dataBuffer.close(isDatabaseWriteSuppressed());
 
         wakeLock.release();
-
-        unregisterReceiver(dataLabeler);
 
         ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Gyroscope_Provider.getAuthority(this), false);
         ContentResolver.removePeriodicSync(
@@ -298,15 +237,15 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
                 saveGyroscopeDevice(mGyroscope);
 
                 if (Aware.getSetting(this, Aware_Preferences.FREQUENCY_GYROSCOPE).length() == 0) {
-                    Aware.setSetting(this, Aware_Preferences.FREQUENCY_GYROSCOPE, 200000);
+                    Aware.setSetting(this, Aware_Preferences.FREQUENCY_GYROSCOPE, 20000);
                 }
 
                 if (Aware.getSetting(this, Aware_Preferences.THRESHOLD_GYROSCOPE).length() == 0) {
                     Aware.setSetting(this, Aware_Preferences.THRESHOLD_GYROSCOPE, 0.0);
                 }
 
-                int new_frequency = Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_GYROSCOPE));
-                double new_threshold = Double.parseDouble(Aware.getSetting(getApplicationContext(), Aware_Preferences.THRESHOLD_GYROSCOPE));
+                int new_frequency = Aware.getSettingAsInt(getApplicationContext(), Aware_Preferences.FREQUENCY_GYROSCOPE, 20000);
+                double new_threshold = Aware.getSettingAsDouble(getApplicationContext(), Aware_Preferences.THRESHOLD_GYROSCOPE, 0.0);
                 boolean new_enforce_frequency = (Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_GYROSCOPE_ENFORCE).equals("true")
                         || Aware.getSetting(getApplicationContext(), Aware_Preferences.ENFORCE_FREQUENCY_ALL).equals("true"));
 
@@ -322,7 +261,7 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
                     ENFORCE_FREQUENCY = new_enforce_frequency;
                 }
 
-                mSensorManager.registerListener(this, mGyroscope, Integer.parseInt(Aware.getSetting(getApplicationContext(), Aware_Preferences.FREQUENCY_GYROSCOPE)), sensorHandler);
+                mSensorManager.registerListener(this, mGyroscope, SensorTimeUnits.samplingPeriodUs(new_frequency), sensorHandler);
                 LAST_SAVE = System.currentTimeMillis();
             }
 
@@ -331,7 +270,7 @@ public class Gyroscope extends Aware_Sensor implements SensorEventListener {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), Gyroscope_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), Gyroscope_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), Gyroscope_Provider.getAuthority(this))

@@ -42,7 +42,12 @@ public class AudioAnalysis {
     }
 
     public boolean isSilent(double db) {
-        double threshold = Double.valueOf(Aware.getSetting(context, Settings.PLUGIN_AMBIENT_NOISE_SILENCE_THRESHOLD));
+        double threshold;
+        try {
+            threshold = Double.parseDouble(Aware.getSetting(context, Settings.PLUGIN_AMBIENT_NOISE_SILENCE_THRESHOLD));
+        } catch (NumberFormatException e) {
+            threshold = 50;
+        }
         return (db <= threshold);
     }
 

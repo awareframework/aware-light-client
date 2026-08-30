@@ -26,7 +26,7 @@ import java.util.TimeZone;
  *
  * @author Denzil
  *         Made sensor event-based, instead of polling data.
- *         <p>
+ *
  *         Original @author Nikola
  */
 public class Timezone extends Aware_Sensor {
@@ -99,7 +99,7 @@ public class Timezone extends Aware_Sensor {
         lastTimezone = TimeZone.getDefault().getID();
         ContentValues rowData = new ContentValues();
         rowData.put(TimeZone_Data.TIMESTAMP, System.currentTimeMillis());
-        rowData.put(TimeZone_Data.DEVICE_ID, Aware.getSetting(getApplicationContext(), Aware_Preferences.DEVICE_ID));
+        rowData.put(TimeZone_Data.DEVICE_ID, Aware.getDeviceID(getApplicationContext()));
         rowData.put(TimeZone_Data.TIMEZONE, lastTimezone);
 
         try {
@@ -137,7 +137,7 @@ public class Timezone extends Aware_Sensor {
             if (Aware.isStudy(this)) {
                 ContentResolver.setIsSyncable(Aware.getAWAREAccount(this), TimeZone_Provider.getAuthority(this), 1);
                 ContentResolver.setSyncAutomatically(Aware.getAWAREAccount(this), TimeZone_Provider.getAuthority(this), true);
-                long frequency = Long.parseLong(Aware.getSetting(this, Aware_Preferences.FREQUENCY_WEBSERVICE)) * 60;
+                long frequency = Aware.getSettingAsLong(this, Aware_Preferences.FREQUENCY_WEBSERVICE, 30) * 60;
                 SyncRequest request = new SyncRequest.Builder()
                         .syncPeriodic(frequency, frequency / 3)
                         .setSyncAdapter(Aware.getAWAREAccount(this), TimeZone_Provider.getAuthority(this))
