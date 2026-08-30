@@ -321,6 +321,43 @@ public class ESM extends Aware_Sensor {
     }
 
     /**
+     * Check whether a question is still open on this phone.
+     *
+     * Wider than {@link #isESMWaiting(Context)}, which asks only about questions
+     * that never expire. A question carrying an expiry is just as open until that
+     * expiry passes, and one the participant has already opened without answering
+     * is open too --- so this counts NEW and VISIBLE alike, and drops only those
+     * whose time is genuinely up.
+     *
+     * Used to bring a waiting question forward when the participant opens the app,
+     * which is the one moment they are certainly looking at the phone.
+     *
+     * @param c
+     * @return
+     */
+    public static boolean hasOpenESM(Context c) {
+        boolean is_open = false;
+        Cursor open = c.getContentResolver().query(
+                ESM_Data.CONTENT_URI,
+                null,
+                ESM_Data.STATUS + " IN (" + ESM.STATUS_NEW + "," + ESM.STATUS_VISIBLE + ")",
+                null,
+                ESM_Data.TIMESTAMP + " ASC");
+        if (open != null && open.moveToFirst()) {
+            do {
+                int expiry = open.getInt(open.getColumnIndex(ESM_Data.EXPIRATION_THRESHOLD));
+                long shown = open.getLong(open.getColumnIndex(ESM_Data.TIMESTAMP));
+                if (expiry <= 0 || (System.currentTimeMillis() - shown) / 1000 < expiry) {
+                    is_open = true;
+                    break;
+                }
+            } while (open.moveToNext());
+        }
+        if (open != null && !open.isClosed()) open.close();
+        return is_open;
+    }
+
+    /**
      * Check if we there is a VISIBLE ESMs that we are answering right now
      *
      * @param c

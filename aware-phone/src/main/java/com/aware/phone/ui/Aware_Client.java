@@ -52,11 +52,13 @@ import android.widget.Toast;
 import com.aware.Applications;
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
+import com.aware.ESM;
 import com.aware.Notes;
 import com.aware.phone.R;
 import com.aware.phone.ui.dialogs.JoinStudyDialog;
 import com.aware.phone.ui.dialogs.QuitStudyDialog;
 import com.aware.phone.ui.prefs.SensorCollection;
+import com.aware.ui.ESM_Queue;
 import com.aware.phone.ui.prefs.StudyCard;
 import com.aware.phone.ui.prefs.TakeNotesPref;
 import com.aware.phone.utils.AwareUtil;
@@ -1981,6 +1983,25 @@ private void enableAccessibilityService(final Runnable onResolved) {
     private static volatile long lastSyncConfigBroadcastAtMs = 0;
     private static final long SYNC_CONFIG_DEBOUNCE_MS = 10_000;
 
+    /**
+     * Put an unanswered question back on screen when the participant opens the app.
+     *
+     * Skipped while one is already being answered: ESM_Queue is then the activity
+     * in front, and starting it again would restart the participant's answering.
+     */
+    private void showOpenESMIfAny() {
+        try {
+            if (ESM.isESMVisible(getApplicationContext())) return;
+            if (!ESM.hasOpenESM(getApplicationContext())) return;
+            Intent queue = new Intent(this, ESM_Queue.class);
+            queue.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(queue);
+        } catch (Exception e) {
+            // A question that cannot be shown must not stop the app from opening.
+            if (Aware.DEBUG) Log.d("Aware_Client", "Could not bring an open ESM forward: " + e.getMessage());
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -2006,6 +2027,14 @@ private void enableAccessibilityService(final Runnable onResolved) {
         // A password-join study may have had its password rotated; background sync flags it but
         // cannot prompt, so ask for the new password here while the app is open.
         showPendingReauthIfAny();
+
+        // A question the participant has not answered is brought forward here. Until
+        // now the only way back to one was the notification, so a swipe or a cleared
+        // shade lost it for good --- the question stayed in the queue and nothing
+        // ever put it on screen again. Opening the app is the one moment they are
+        // certainly looking at the phone, and an expired question is left alone: its
+        // moment has passed and answering it would describe a different one.
+        showOpenESMIfAny();
 
         permissions_ok = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
