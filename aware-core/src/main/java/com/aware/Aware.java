@@ -495,10 +495,31 @@ public class Aware extends Service {
     public static void postGeneralNotification(Context context, String notificationTag,
                                                int notificationId,
                                                CharSequence title, CharSequence text) {
-        Intent open = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+        postGeneralNotification(context, notificationTag, notificationId, title, text, null);
+    }
+
+    /**
+     * As above, opening {@code target} when the notification is tapped.
+     *
+     * Given one, a notification can take the participant to what it is about. The
+     * app's own launcher is the fallback and the right answer for most of these ---
+     * they are about the study rather than about a thing with a screen of its own.
+     */
+    public static void postGeneralNotification(Context context, String notificationTag,
+                                               int notificationId,
+                                               CharSequence title, CharSequence text,
+                                               Intent target) {
+        Intent open = target != null
+                ? target
+                : context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
         PendingIntent clickIntent = null;
         if (open != null) {
-            open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            // CLEAR_TASK is what the launcher wants and what a single screen does
+            // not: clearing the task under it would close whatever the participant
+            // was doing to show them one dialog.
+            open.setFlags(target != null
+                    ? Intent.FLAG_ACTIVITY_NEW_TASK
+                    : Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             clickIntent = PendingIntent.getActivity(
                     context,
                     notificationId,

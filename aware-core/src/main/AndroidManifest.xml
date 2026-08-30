@@ -46,6 +46,15 @@
             android:noHistory="true" />
 
         <activity
+            android:name="com.aware.ui.ResearcherMessage"
+            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:theme="@style/Theme.AppCompat.Translucent" />
+
+        <activity
             android:name="com.aware.ui.PermissionsHandler"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:exported="true"

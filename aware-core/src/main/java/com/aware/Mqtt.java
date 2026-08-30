@@ -18,6 +18,7 @@ import com.aware.providers.Aware_Provider;
 import com.aware.providers.Mqtt_Provider;
 import com.aware.providers.Mqtt_Provider.Mqtt_Messages;
 import com.aware.providers.Mqtt_Provider.Mqtt_Subscriptions;
+import com.aware.ui.ResearcherMessage;
 import com.aware.utils.Aware_Sensor;
 import com.aware.utils.SSLUtils;
 import com.aware.utils.Scheduler;
@@ -268,12 +269,20 @@ public class Mqtt extends Aware_Sensor implements MqttCallback {
         if (title.length() == 0) title = getString(R.string.aware_notif_researcher_message_title);
         if (body.length() == 0) body = getString(R.string.aware_notif_researcher_message_body);
 
+        // Tapping opens the message itself. The words are carried in the intent
+        // because the phone keeps no copy of a notice anywhere else: nothing is
+        // recorded for one, so the notification and this screen are all there is.
+        Intent open = new Intent(this, ResearcherMessage.class);
+        open.putExtra(ResearcherMessage.EXTRA_TITLE, title);
+        open.putExtra(ResearcherMessage.EXTRA_BODY, body);
+
         Aware.postGeneralNotification(
                 this,
                 "aware_researcher_message_" + Integer.toHexString(messageId.hashCode()),
                 Aware.AWARE_RESEARCHER_MESSAGE_NOTIFICATION_ID,
                 title,
-                body);
+                body,
+                open);
     }
 
     @Override
