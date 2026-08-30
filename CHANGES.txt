@@ -1,5 +1,29 @@
 Change log for AWARE
 
+4.8.2.beta
+- New: a study can now upload through its own webservice instead of the phone connecting to the research database. On this path the phone is given a study URL and nothing else, holds no database credential at all, and the study configuration ships no database block. Which path a study uses is the study's choice; a study whose configuration predates this keeps uploading as before
+- A study on the webservice path is now checked for reachability while joining, so a study URL that does not answer is reported at the QR code instead of leaving a phone that collects and never delivers
+- New: a study can be joined by scanning its QR code from the join dialog, beside pasting the link. Both routes fetch the configuration, check it against the dataflow the study declares, and reach the same consent screen, so a study that joins by link joins by scan
+- The camera is now asked for at the moment the participant chooses to scan, rather than at install; a participant who pastes the link is never asked for it at all
+- The study link field now says what to paste and offers a link keyboard
+- Fixed a password-protected study asking for its password a second time when the join screen came back after a plugin install, even though the correct password had already been given
+- Fixed the join screen carrying a previous study's link and password into a study opened later in the same session
+- Uploads now resume from the last row the research database acknowledged, tracked per table by insertion order rather than by capture time, so a batch offers only rows that have never been sent and a row stored late is not paged over
+- Fixed screen sessions and questionnaire answers that finish long after they were started never being uploaded: a table whose rows finish after they are stored is now paged by the instant they finished, so a row that finishes now is sent on the next sync however long it ran
+- Data is now uploaded on the frequency the study configures. The upload previously ran when Android chose to batch it into a maintenance window, which a study's cadence had no say in
+- Fixed the record of which sensors are failing to deliver being corrupted when several uploads finished at the same moment, which could leave a warning showing after delivery had recovered, or hide one while a table was still failing
+- An install that has no device id yet no longer attempts to sync: there is no identity to attribute a row to, and refusing here is clearer than a payload the server cannot place
+- Fixed one participant being split across two device ids: the id is now kept in a second place and restored when the settings row is lost, instead of a lost row being read as a first run and a new id minted. Data already uploaded under the earlier id could not be tied to the new one
+- Every uploaded row now carries the resolved device id, plugin rows included, which could previously be stamped with an empty one
+- Privacy: reinstalling the app no longer restores the previous installation's id, study credentials, settings or sensor database from an Android backup. A reinstall is a new identity
+- The device name the participant sets is now kept in the device profile the study receives, and changing it sends a new profile row rather than being lost at the next upload
+- New: a researcher can send a message to a participant, delivered over the study's MQTT channel and shown as a notification with sound. Tapping it opens the message itself rather than the app's main screen
+- New: a questionnaire the participant has not answered is put back on screen when they open the app. Until now the notification was the only way back to one, so a swipe or a cleared shade lost it for good. A question whose time has expired is left alone
+- Dates and times recorded as text (screenshot filenames, and answers to date and date-and-time questions) are now recorded in UTC, so a researcher reads one timezone across the whole dataset. Every other timestamp was already UTC-anchored
+- Physical sensors (accelerometer, barometer, gravity, gyroscope, light, linear accelerometer, magnetometer, proximity, rotation, temperature) now write through one ordered background worker with a bounded buffer that retries a failed write, instead of starting a thread for every batch. A write that fails is retried before later samples rather than dropping the batch
+- Removed the per-reading label column from those ten sensors, which was written empty on every row and never set. Existing tables are updated in place, without copying the data
+- Every database provider now releases its transaction on every exit path, so a failed write can no longer leave the database locked for the rest of the session
+
 4.8.1.beta
 - Sensor and plugin consent is now shown before joining a study instead of after, and covers the plugins a study needs as well as its sensors, grouped into labelled sections
 - Leaving a study now always completes on the device, even when the research database cannot be reached; telling the researcher is best-effort, and the exit record states when it could not be delivered
